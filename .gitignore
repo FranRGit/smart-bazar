@@ -1,0 +1,19 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# Streamlit
+.streamlit/
+
+# Python cache y compilados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Base de datos local
+db_consultas.sqlite

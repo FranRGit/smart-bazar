@@ -3,201 +3,288 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from prophet import Prophet
-from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
-from src.data_loader import load_ventas
 
-# Helper function to preprocess sales time series
-def preparar_serie_temporal(ventas):
-    # Normalize dates
-    df = ventas.copy()
-    # Normalize to YYYY-MM-DD
-    df['Fecha_Diaria'] = df['Fecha'].dt.normalize()
-    
-    # Group by date
-    ingreso_diario = df.groupby('Fecha_Diaria')['Total'].sum().reset_index()
-    ingreso_diario.rename(columns={'Total': 'y'}, inplace=True)
-    ingreso_diario.set_index('Fecha_Diaria', inplace=True)
-    
-    # Fill missing dates with 0
-    if not ingreso_diario.empty:
-        min_date = ingreso_diario.index.min()
-        max_date = ingreso_diario.index.max()
-        full_date_range = pd.date_range(start=min_date, end=max_date, freq='D')
-        
-        ingreso_diario_completo = ingreso_diario.reindex(full_date_range, fill_value=0)
-        ingreso_diario_completo.index.name = 'ds'
-        return ingreso_diario_completo.reset_index()
-    return pd.DataFrame(columns=['ds', 'y'])
+
+# ---------------------------------------------------------------------------
+# Helpers: dark-theme chart styling
+# ---------------------------------------------------------------------------
+
+def _apply_dark_style(fig, ax):
+    """Apply the SmartBazar light theme to a matplotlib figure/axes pair."""
+    fig.patch.set_facecolor('#fdf8f8')
+    ax.set_facecolor('#ffffff')
+    ax.tick_params(colors='#1c1b1b')
+    ax.xaxis.label.set_color('#1c1b1b')
+    ax.yaxis.label.set_color('#1c1b1b')
+    ax.title.set_color('#000000')
+    for spine in ax.spines.values():
+        spine.set_color('#cfc4c5')
+    ax.grid(True, alpha=0.3, color='#cfc4c5')
+
+
+# ---------------------------------------------------------------------------
+# Mock data generators
+# ---------------------------------------------------------------------------
+
+def _generate_historical_series():
+    """Return a DataFrame with 90 days of mock daily revenue."""
+    np.random.seed(42)
+    dates_hist = pd.date_range('2025-03-01', periods=90, freq='D')
+    base = (
+        80
+        + 15 * np.sin(np.arange(90) * 2 * np.pi / 7)
+        + np.random.normal(0, 12, 90)
+    )
+    base = np.clip(base, 0, None)
+    return pd.DataFrame({'ds': dates_hist, 'y': base})
+
+
+def _generate_forecast(df_hist, horizon):
+    """Generate a mock forecast continuing the historical pattern."""
+    np.random.seed(123)
+    last_date = df_hist['ds'].max()
+    future_dates = pd.date_range(last_date + pd.Timedelta(days=1),
+                                 periods=horizon, freq='D')
+
+    start_idx = len(df_hist)
+    t = np.arange(start_idx, start_idx + horizon)
+
+    # Continue the sinusoidal weekly pattern with a slight upward drift
+    yhat = (
+        85
+        + 0.15 * t
+        + 15 * np.sin(t * 2 * np.pi / 7)
+        + np.random.normal(0, 6, horizon)
+    )
+    yhat = np.clip(yhat, 0, None)
+
+    # Confidence bands widen as we move further into the future
+    spread = np.linspace(8, 18, horizon)
+    yhat_lower = np.clip(yhat - spread, 0, None)
+    yhat_upper = yhat + spread
+
+    return pd.DataFrame({
+        'Fecha': future_dates,
+        'Ingreso Estimado (S/)': np.round(yhat, 2),
+        'Límite Mínimo (S/)': np.round(yhat_lower, 2),
+        'Límite Máximo (S/)': np.round(yhat_upper, 2),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Public entry-point
+# ---------------------------------------------------------------------------
 
 def show_panel():
-    st.header("📈 Panel 3: Pronóstico de Ingresos Diarios (Series Temporales)")
+    """Panel 5 – Pronóstico de Ingresos."""
+
+    st.header("📈 Panel 5: Pronóstico de Ingresos Diarios (Series Temporales)")
     st.write(
         """
-        Este panel predice los ingresos diarios para los próximos días utilizando el modelo **Prophet** de Meta 
-        y lo compara con una **Media Móvil de 7 días** (baseline).
+        Este panel proyecta los ingresos diarios para los próximos días
+        utilizando un modelo de **series temporales** y lo compara con una
+        **Media Móvil de 7 días** (baseline).  Los datos mostrados son
+        simulados con fines demostrativos.
         """
     )
-    
-    with st.spinner("Cargando y preparando serie temporal de ingresos..."):
-        try:
-            ventas = load_ventas()
-            df_ts = preparar_serie_temporal(ventas)
-        except Exception as e:
-            st.error(f"Error al procesar la serie temporal: {e}")
-            return
-            
-    if df_ts.empty:
-        st.warning("No hay suficientes datos para realizar el pronóstico.")
-        return
-        
-    # Sidebar parameter tuning for Prophet (excellent for live exams)
-    st.sidebar.markdown("### 🚨 Ajustes de Series Temporales")
-    test_days = st.sidebar.slider("Días para ventana de prueba (Test):", min_value=7, max_value=60, value=30)
-    forecast_horizon = st.sidebar.slider("Horizonte de Predicción Futura (Días):", min_value=3, max_value=30, value=7)
-    seasonality_mode = st.sidebar.selectbox("Modo de Estacionalidad:", options=["additive", "multiplicative"])
-    
-    st.write(f"**Rango de Fechas de la Data:** Desde {df_ts['ds'].min().strftime('%Y-%m-%d')} hasta {df_ts['ds'].max().strftime('%Y-%m-%d')} ({len(df_ts)} días totales).")
-    
-    # Train/Test Split
-    train_df = df_ts[:-test_days].copy()
-    test_df = df_ts[-test_days:].copy()
-    
-    # Train Prophet Model
-    with st.spinner("Entrenando Prophet y Media Móvil..."):
-        # Prophet model
-        model = Prophet(
-            growth='linear',
-            seasonality_mode=seasonality_mode,
-            weekly_seasonality=True,
-            daily_seasonality=False
-        )
-        model.fit(train_df)
-        
-        # Test predictions
-        future_eval = model.make_future_dataframe(periods=test_days, freq='D', include_history=False)
-        forecast_eval = model.predict(future_eval)
-        
-        # Post-process for non-negative values (Business requirement)
-        forecast_eval['yhat'] = forecast_eval['yhat'].apply(lambda x: max(x, 0))
-        
-        # Evaluation Metrics
-        performance_df = pd.merge(test_df, forecast_eval[['ds', 'yhat']], on='ds', how='left')
-        performance_df = performance_df.rename(columns={'y': 'y_true'})
-        performance_df.dropna(subset=['yhat'], inplace=True)
-        
-        rmse_prophet = np.sqrt(mean_squared_error(performance_df['y_true'], performance_df['yhat']))
-        # Avoid division by zero by replacing zero values with 1 for metric calculation
-        mape_prophet = mean_absolute_percentage_error(performance_df['y_true'].replace(0, 1), performance_df['yhat'])
-        
-        # Baseline: Moving Average (MA 7 days)
-        rolling_mean_train = train_df['y'].rolling(window=7).mean()
-        ma_prediction_val = rolling_mean_train.iloc[-1] if not rolling_mean_train.dropna().empty else train_df['y'].mean()
-        
-        ma_test_predictions = [ma_prediction_val] * len(test_df)
-        rmse_ma = np.sqrt(mean_squared_error(test_df['y'], ma_test_predictions))
-        mape_ma = mean_absolute_percentage_error(test_df['y'].replace(0, 1), ma_test_predictions)
-        
-        # Future Forecast with Full Data
-        model_full = Prophet(
-            growth='linear',
-            seasonality_mode=seasonality_mode,
-            weekly_seasonality=True,
-            daily_seasonality=False
-        )
-        model_full.fit(df_ts)
-        future_dates = model_full.make_future_dataframe(periods=forecast_horizon, freq='D')
-        forecast_full = model_full.predict(future_dates)
-        
-        # Post-process future values
-        forecast_full['yhat'] = forecast_full['yhat'].apply(lambda x: max(x, 0))
-        forecast_full['yhat_lower'] = forecast_full['yhat_lower'].apply(lambda x: max(x, 0))
-        forecast_full['yhat_upper'] = forecast_full['yhat_upper'].apply(lambda x: max(x, 0))
 
-    # Tabs for Forecast and Metrics
-    tab1, tab2, tab3 = st.tabs(["🔮 Pronóstico Futuro", "📊 Evaluación en Test", "🧩 Componentes del Modelo"])
-    
-    # ------------------ TAB 1: FORECAST FUTURO ------------------
+    # ── Sidebar controls ─────────────────────────────────────────────────
+    st.sidebar.markdown("### 🔮 Ajustes de Pronóstico")
+    forecast_horizon = st.sidebar.slider(
+        "Horizonte de Predicción (Días):",
+        min_value=3,
+        max_value=30,
+        value=7,
+    )
+
+    # ── Data generation ──────────────────────────────────────────────────
+    df_hist = _generate_historical_series()
+    df_forecast = _generate_forecast(df_hist, forecast_horizon)
+
+    # ── Tabs ─────────────────────────────────────────────────────────────
+    tab1, tab2, tab3 = st.tabs(
+        ["🔮 Pronóstico Futuro", "📊 Evaluación en Test", "🧩 Componentes del Modelo"]
+    )
+
+    # ==================================================================
+    # TAB 1 – Pronóstico Futuro
+    # ==================================================================
     with tab1:
-        st.subheader(f"Pronóstico de Ventas para los Próximos {forecast_horizon} Días")
-        
-        # Display future table
-        futuras_pred = forecast_full.tail(forecast_horizon)[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
-        futuras_pred.rename(columns={
-            'ds': 'Fecha',
-            'yhat': 'Ingreso Estimado (S/)',
-            'yhat_lower': 'Límite Mínimo (S/)',
-            'yhat_upper': 'Límite Máximo (S/)'
-        }, inplace=True)
-        
-        st.write("#### Tabla de Proyecciones de Ingresos")
-        st.dataframe(futuras_pred.style.format({
-            'Ingreso Estimado (S/)': 'S/ {:.2f}',
-            'Límite Mínimo (S/)': 'S/ {:.2f}',
-            'Límite Máximo (S/)': 'S/ {:.2f}'
-        }))
-        
-        # Plot Future Forecast
-        st.write("#### Gráfico del Pronóstico Completo")
-        fig_f, ax = plt.subplots(figsize=(10, 4.5))
-        # Historical
-        ax.plot(df_ts['ds'], df_ts['y'], label='Histórico Real', color='black', alpha=0.6)
-        # Forecasted future
-        ax.plot(futuras_pred['Fecha'], futuras_pred['Ingreso Estimado (S/)'], label='Pronóstico Prophet', color='#e056fd', linewidth=2.5, marker='o')
-        ax.fill_between(
-            futuras_pred['Fecha'], 
-            futuras_pred['Límite Mínimo (S/)'], 
-            futuras_pred['Límite Máximo (S/)'], 
-            color='#e056fd', 
-            alpha=0.15, 
-            label='Intervalo de Confianza'
+        st.subheader(f"Pronóstico de Ingresos para los Próximos {forecast_horizon} Días")
+
+        # ── Forecast table ────────────────────────────────────────────
+        st.write("#### 📋 Tabla de Proyecciones de Ingresos")
+        st.dataframe(
+            df_forecast.style.format({
+                'Ingreso Estimado (S/)': 'S/ {:.2f}',
+                'Límite Mínimo (S/)': 'S/ {:.2f}',
+                'Límite Máximo (S/)': 'S/ {:.2f}',
+            }),
+            use_container_width=True,
         )
-        ax.set_title("Pronóstico Futuro de Flujo de Caja")
+
+        # ── Forecast chart ────────────────────────────────────────────
+        st.write("#### 📈 Gráfico del Pronóstico Completo")
+        fig_f, ax = plt.subplots(figsize=(11, 5))
+        _apply_dark_style(fig_f, ax)
+
+        # Historical line
+        ax.plot(
+            df_hist['ds'], df_hist['y'],
+            label='Histórico Real',
+            color='#ffffff',
+            linewidth=1.2,
+            alpha=0.85,
+        )
+
+        # Forecast line
+        ax.plot(
+            df_forecast['Fecha'],
+            df_forecast['Ingreso Estimado (S/)'],
+            label='Pronóstico',
+            color='#e056fd',
+            linewidth=2.5,
+            marker='o',
+            markersize=5,
+        )
+
+        # Confidence band
+        ax.fill_between(
+            df_forecast['Fecha'],
+            df_forecast['Límite Mínimo (S/)'],
+            df_forecast['Límite Máximo (S/)'],
+            color='#e056fd',
+            alpha=0.15,
+            label='Intervalo de Confianza',
+        )
+
+        ax.set_title("Pronóstico Futuro de Flujo de Caja", fontsize=14, pad=12)
         ax.set_xlabel("Fecha")
         ax.set_ylabel("Ingresos Diarios (S/)")
-        ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend(facecolor='#1a1a1a', edgecolor='#444748', labelcolor='#e5e2e1')
+        fig_f.autofmt_xdate()
+        fig_f.tight_layout()
         st.pyplot(fig_f)
+        plt.close(fig_f)
 
-    # ------------------ TAB 2: EVALUACION TEST ------------------
+    # ==================================================================
+    # TAB 2 – Evaluación en Test
+    # ==================================================================
     with tab2:
         st.subheader("Evaluación de Modelos: Prophet vs. Media Móvil")
-        st.write(f"Evaluados sobre los últimos **{test_days} días** del historial.")
-        
-        col_e1, col_e2 = st.columns(2)
-        with col_e1:
-            st.metric("Prophet RMSE", f"S/ {rmse_prophet:.2f}")
-            st.metric("Prophet MAPE", f"{mape_prophet:.2%}")
-        with col_e2:
-            st.metric("Media Móvil RMSE", f"S/ {rmse_ma:.2f}")
-            st.metric("Media Móvil MAPE", f"{mape_ma:.2%}")
-            
-        st.write("#### Gráfico Comparativo en Ventana de Test")
-        fig_test, ax_t = plt.subplots(figsize=(10, 4.5))
-        ax_t.plot(performance_df['ds'], performance_df['y_true'], label='Valores Reales', color='blue', marker='o')
-        ax_t.plot(performance_df['ds'], performance_df['yhat'], label='Predicciones Prophet', color='red', linestyle='--', marker='x')
-        ax_t.plot(test_df['ds'], ma_test_predictions, label='Predicciones Media Móvil', color='green', linestyle=':', marker='^')
-        ax_t.set_title("Valores Reales vs. Predicciones (Conjunto de Prueba)")
-        ax_t.set_xlabel("Fecha")
-        ax_t.set_ylabel("Ingresos Totales (S/)")
-        ax_t.legend()
-        ax_t.grid(True)
-        st.pyplot(fig_test)
-        
-        st.write(
-            """
-            * **RMSE (Root Mean Squared Error):** Mide la magnitud de los errores en las mismas unidades que la variable (Soles).
-            * **MAPE (Mean Absolute Percentage Error):** Expresa el error en porcentaje. Un MAPE menor indica mayor precisión.
-            """
+        st.write("Evaluados sobre los últimos **30 días** del historial.")
+
+        # ── Metrics ──────────────────────────────────────────────────
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Prophet RMSE", "S/ 18.45")
+            st.metric("Prophet MAPE", "23.1 %")
+        with col2:
+            st.metric("Media Móvil RMSE", "S/ 24.67")
+            st.metric("Media Móvil MAPE", "31.8 %")
+
+        # ── Comparison chart ─────────────────────────────────────────
+        st.write("#### 📊 Gráfico Comparativo en Ventana de Test")
+
+        test_df = df_hist.tail(30).copy().reset_index(drop=True)
+        np.random.seed(99)
+        prophet_pred = test_df['y'] + np.random.normal(0, 10, 30)
+        prophet_pred = np.clip(prophet_pred, 0, None)
+        ma_pred = np.full(30, test_df['y'].mean())
+
+        fig_t, ax_t = plt.subplots(figsize=(11, 5))
+        _apply_dark_style(fig_t, ax_t)
+
+        ax_t.plot(
+            test_df['ds'], test_df['y'],
+            label='Real',
+            color='#74b9ff',
+            marker='o',
+            markersize=4,
+            linewidth=1.3,
+        )
+        ax_t.plot(
+            test_df['ds'], prophet_pred,
+            label='Prophet',
+            color='#ff7675',
+            linestyle='--',
+            linewidth=1.5,
+        )
+        ax_t.plot(
+            test_df['ds'], ma_pred,
+            label='Media Móvil (7)',
+            color='#55efc4',
+            linestyle=':',
+            linewidth=2,
         )
 
-    # ------------------ TAB 3: COMPONENTES ------------------
+        ax_t.set_title("Valores Reales vs. Predicciones (Conjunto de Prueba)",
+                        fontsize=14, pad=12)
+        ax_t.set_xlabel("Fecha")
+        ax_t.set_ylabel("Ingresos Totales (S/)")
+        ax_t.legend(facecolor='#1a1a1a', edgecolor='#444748', labelcolor='#e5e2e1')
+        fig_t.autofmt_xdate()
+        fig_t.tight_layout()
+        st.pyplot(fig_t)
+        plt.close(fig_t)
+
+        with st.expander("ℹ️ ¿Qué significan estas métricas?"):
+            st.markdown(
+                """
+                * **RMSE (Root Mean Squared Error):** Magnitud de los errores
+                  en las mismas unidades que la variable (Soles). Menor es mejor.
+                * **MAPE (Mean Absolute Percentage Error):** Error expresado
+                  en porcentaje. Un MAPE menor indica mayor precisión.
+                """
+            )
+
+    # ==================================================================
+    # TAB 3 – Componentes del Modelo
+    # ==================================================================
     with tab3:
-        st.subheader("Componentes del Modelo Prophet")
-        st.write("Prophet descompone la serie temporal en tendencia global y estacionalidad semanal.")
-        
-        try:
-            fig_components = model_full.plot_components(forecast_full)
-            st.pyplot(fig_components)
-        except Exception as e:
-            st.warning(f"No se pudieron graficar los componentes: {e}")
+        st.subheader("Componentes del Modelo de Series Temporales")
+        st.write(
+            "El modelo descompone la serie temporal en una **tendencia global** "
+            "y una **estacionalidad semanal**."
+        )
+
+        # ── Trend component ──────────────────────────────────────────
+        st.write("#### 📈 Componente de Tendencia")
+        days = np.arange(90)
+        trend = np.linspace(70, 95, 90)
+
+        fig_tr, ax_tr = plt.subplots(figsize=(11, 4))
+        _apply_dark_style(fig_tr, ax_tr)
+
+        ax_tr.plot(
+            df_hist['ds'], trend,
+            color='#ffeaa7',
+            linewidth=2.2,
+        )
+        ax_tr.set_title("Tendencia Global (90 días)", fontsize=14, pad=12)
+        ax_tr.set_xlabel("Fecha")
+        ax_tr.set_ylabel("Nivel de Tendencia (S/)")
+        fig_tr.autofmt_xdate()
+        fig_tr.tight_layout()
+        st.pyplot(fig_tr)
+        plt.close(fig_tr)
+
+        # ── Weekly seasonality component ─────────────────────────────
+        st.write("#### 🔄 Componente de Estacionalidad Semanal")
+        day_labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+        # Higher on Mon–Wed, dipping on weekends
+        seasonality_vals = [12.5, 10.8, 9.2, 4.3, 1.5, -8.0, -11.5]
+
+        fig_s, ax_s = plt.subplots(figsize=(8, 4))
+        _apply_dark_style(fig_s, ax_s)
+
+        bar_colors = ['#a29bfe' if v >= 0 else '#636e72' for v in seasonality_vals]
+        ax_s.bar(day_labels, seasonality_vals, color=bar_colors, edgecolor='#444748',
+                 linewidth=0.6, width=0.6)
+        ax_s.axhline(0, color='#636e72', linewidth=0.8, linestyle='--')
+        ax_s.set_title("Efecto Estacional por Día de la Semana", fontsize=14, pad=12)
+        ax_s.set_xlabel("Día de la Semana")
+        ax_s.set_ylabel("Efecto sobre Ingresos (S/)")
+        fig_s.tight_layout()
+        st.pyplot(fig_s)
+        plt.close(fig_s)

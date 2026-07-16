@@ -1,0 +1,385 @@
+<!DOCTYPE html><html class="light" lang="es" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-secondary-fixed-variant": "#454747",
+                "on-tertiary-fixed-variant": "#484645",
+                "on-secondary-container": "#616363",
+                "surface-container-high": "#ebe7e6",
+                "secondary-container": "#dfe0e0",
+                "tertiary-fixed": "#e6e1df",
+                "error-container": "#ffdad6",
+                "on-error": "#ffffff",
+                "outline-variant": "#c4c7c7",
+                "error": "#ba1a1a",
+                "tertiary-fixed-dim": "#cac6c3",
+                "tertiary": "#000000",
+                "primary": "#000000",
+                "on-primary": "#ffffff",
+                "on-surface-variant": "#444748",
+                "surface-bright": "#fdf8f8",
+                "on-primary-fixed-variant": "#474646",
+                "secondary": "#5d5f5f",
+                "secondary-fixed-dim": "#c6c6c7",
+                "primary-fixed": "#e5e2e1",
+                "primary-fixed-dim": "#c8c6c5",
+                "on-primary-container": "#858383",
+                "surface-variant": "#e5e2e1",
+                "primary-container": "#1c1b1b",
+                "outline": "#747878",
+                "on-background": "#1c1b1b",
+                "on-tertiary-fixed": "#1d1b1a",
+                "surface-tint": "#5f5e5e",
+                "on-secondary-fixed": "#1a1c1c",
+                "secondary-fixed": "#e2e2e2",
+                "surface-container": "#f1edec",
+                "tertiary-container": "#1d1b1a",
+                "inverse-primary": "#c8c6c5",
+                "on-surface": "#1c1b1b",
+                "on-tertiary": "#ffffff",
+                "on-primary-fixed": "#1c1b1b",
+                "surface-container-low": "#f7f3f2",
+                "background": "#fdf8f8",
+                "surface-container-highest": "#e5e2e1",
+                "surface": "#fdf8f8",
+                "on-error-container": "#93000a",
+                "on-secondary": "#ffffff",
+                "inverse-on-surface": "#f4f0ef",
+                "inverse-surface": "#313030",
+                "surface-dim": "#ddd9d8",
+                "surface-container-lowest": "#ffffff",
+                "on-tertiary-container": "#868381"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "2xl": "1rem",
+                "3xl": "1.5rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "grid-gap": "24px",
+                "card-padding": "24px",
+                "sidebar-width": "280px",
+                "container-max": "1440px",
+                "section-margin": "40px"
+        },
+        "fontFamily": {
+                "body-lg": [
+                        "Inter"
+                ],
+                "headline-lg": [
+                        "Inter"
+                ],
+                "display-lg": [
+                        "Inter"
+                ],
+                "headline-md": [
+                        "Inter"
+                ],
+                "label-sm": [
+                        "Inter"
+                ],
+                "body-sm": [
+                        "Inter"
+                ],
+                "body-md": [
+                        "Inter"
+                ],
+                "label-md": [
+                        "Inter"
+                ]
+        },
+        "fontSize": {
+                "body-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "1.6",
+                                "fontWeight": "400"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "1.2",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "display-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "1.1",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-md": [
+                        "24px",
+                        {
+                                "lineHeight": "1.3",
+                                "fontWeight": "600"
+                        }
+                ],
+                "label-sm": [
+                        "12px",
+                        {
+                                "lineHeight": "1.2",
+                                "fontWeight": "500"
+                        }
+                ],
+                "body-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "1.5",
+                                "fontWeight": "400"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "1.5",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-md": [
+                        "14px",
+                        {
+                                "lineHeight": "1.2",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "600"
+                        }
+                ]
+        }
+},
+    },
+  }
+}catch(_e){}</script></head><body class="bg-gradient-blur text-on-surface font-body-md antialiased min-h-screen flex selection:bg-primary selection:text-on-primary">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-[calc(100vh-2rem)] fixed left-4 top-4 bottom-4 w-sidebar-width bg-white/80 backdrop-blur-xl border border-black/5 z-50 rounded-3xl shadow-sm">
+<div class="px-8 pt-10 pb-8">
+<h1 class="font-headline-lg text-headline-lg font-bold text-primary">SmartBazar</h1>
+<p class="font-label-md text-label-md text-on-surface-variant mt-2">Grupo 05</p>
+</div>
+<div class="px-6 mb-8">
+
+</div>
+<ul class="flex-1 space-y-1 px-4">
+<li class="">
+<a class="text-on-surface-variant hover:bg-surface-container-low rounded-xl px-4 py-3 flex items-center gap-3 transition-all font-body-md font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+                    EDA
+                </a>
+</li>
+<li class="">
+<a class="text-on-surface-variant hover:bg-surface-container-low rounded-xl px-4 py-3 flex items-center gap-3 transition-all font-body-md font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">hub</span>
+                    Clustering + Reglas
+                </a>
+</li>
+<li class="">
+<a class="text-on-surface-variant hover:bg-surface-container-low rounded-xl px-4 py-3 flex items-center gap-3 transition-all font-body-md font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">category</span>
+                    Clasificación
+                </a>
+</li>
+<li class="">
+<a class="text-on-surface-variant hover:bg-surface-container-low rounded-xl px-4 py-3 flex items-center gap-3 transition-all font-body-md font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">trending_up</span>
+                    Predicciones
+                </a>
+</li>
+<li class="">
+<a class="bg-primary text-on-primary rounded-xl px-4 py-3 flex items-center gap-3 font-body-md font-medium shadow-md transition-transform" href="#">
+<span class="material-symbols-outlined text-[20px]">point_of_sale</span>
+                    POS Inteligente
+                </a>
+</li>
+</ul>
+<ul class="mt-auto px-4 pb-6 space-y-1">
+<li class="">
+
+</li>
+<li class="">
+
+</li>
+</ul>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-[calc(280px+1rem)] p-4 md:p-8 max-w-container-max mx-auto w-full flex flex-col gap-6 min-h-screen">
+<!-- Header Section -->
+<header class="flex justify-between items-center bg-white/50 backdrop-blur-md border border-black/5 rounded-2xl px-6 py-4 shadow-sm">
+<div>
+<h2 class="font-headline-md text-primary tracking-tight">Punto de Venta Inteligente</h2>
+<p class="font-body-sm text-on-surface-variant mt-1">Terminal Activa - Caja 01</p>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-white border border-black/5 px-4 py-2 rounded-full shadow-sm">
+<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="font-label-md text-on-surface-variant">IA Engine Online</span>
+</div>
+<button class="w-10 h-10 rounded-full bg-white border border-black/5 flex items-center justify-center hover:bg-surface-container-low transition-colors shadow-sm">
+<span class="material-symbols-outlined text-primary">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Top Section: 60/40 Split -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-[500px]">
+<!-- Left: Search/Input Area (60% -> 7 cols) -->
+<div class="lg:col-span-7 flex flex-col gap-6">
+<!-- Large Input Field -->
+<div class="bento-card p-10 flex flex-col items-center justify-center flex-1 relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-surface-container-low/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-full max-w-xl relative z-10">
+<label class="sr-only" for="pos-search">Buscar producto o escanear código de barras...</label>
+<div class="relative">
+<span class="absolute left-6 top-1/2 -translate-y-1/2 material-symbols-outlined text-3xl text-on-surface-variant">barcode_scanner</span>
+<input autofocus="" class="w-full bg-surface-container-low border border-black/5 rounded-full py-6 pl-16 pr-8 font-body-lg text-primary placeholder:text-on-surface-variant focus:border-primary/20 focus:ring-2 focus:ring-primary/10 transition-all outline-none shadow-inner" id="pos-search" placeholder="Buscar producto o escanear código de barras..." type="text">
+<button class="absolute right-3 top-1/2 -translate-y-1/2 bg-white hover:bg-surface-container shadow-sm p-3 rounded-full transition-colors border border-black/5">
+<span class="material-symbols-outlined text-primary">search</span>
+</button>
+</div>
+</div>
+<p class="font-body-sm text-on-surface-variant mt-8 text-center">Esperando lectura de código de barras o entrada manual...</p>
+</div>
+<!-- Recent Scans / Quick Actions -->
+<div class="grid grid-cols-2 gap-6">
+<div class="bento-card p-5 flex items-center gap-4 cursor-pointer hover:border-black/10 transition-colors">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant">history</span>
+</div>
+<div>
+<p class="font-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">Último escaneo</p>
+<p class="font-body-lg font-semibold text-primary">Inca Kola 2L</p>
+</div>
+</div>
+<div class="bento-card p-5 flex items-center gap-4 cursor-pointer hover:border-black/10 transition-colors">
+<div class="w-12 h-12 rounded-xl bg-error-container/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-error" data-original-icon="back">backspace</span>
+</div>
+<div>
+<p class="font-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">Acción</p>
+<p class="font-body-lg font-semibold text-error">Anular Item</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Right: Ticket Virtual (40% -> 5 cols) -->
+<div class="lg:col-span-5 flex flex-col h-full">
+<div class="bento-card-dark p-8 flex flex-col h-full relative overflow-hidden">
+<!-- Subtle gradient effect -->
+<div class="absolute -top-32 -right-32 w-80 h-80 bg-white/5 blur-[80px] rounded-full pointer-events-none"></div>
+<div class="absolute -bottom-32 -left-32 w-80 h-80 bg-white/5 blur-[80px] rounded-full pointer-events-none"></div>
+<div class="flex justify-between items-center mb-8 pb-6 border-b border-white/10 relative z-10">
+<h3 class="font-headline-md flex items-center gap-3">
+<span class="material-symbols-outlined">receipt_long</span>
+                            Ticket Virtual
+                        </h3>
+<span class="font-label-md text-white/50">#TK-2023-8902</span>
+</div>
+<!-- Items List -->
+<div class="flex-1 overflow-y-auto pr-2 space-y-6 mb-8 relative z-10">
+<!-- Item 1 -->
+<div class="flex justify-between items-start group">
+<div>
+<p class="font-body-lg font-medium text-white mb-1">Producto A</p>
+<p class="font-body-sm text-white/60">1 x S/ 10.00</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-body-lg font-medium">S/ 10.00</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-error hover:text-error-container bg-white/10 p-1.5 rounded-full">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex justify-between items-start group">
+<div>
+<p class="font-body-lg font-medium text-white mb-1">Producto B</p>
+<p class="font-body-sm text-white/60">1 x S/ 15.00</p>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-body-lg font-medium">S/ 15.00</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-error hover:text-error-container bg-white/10 p-1.5 rounded-full">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Totals Area -->
+<div class="mt-auto pt-6 border-t border-white/10 relative z-10">
+<div class="flex justify-between items-center mb-3">
+<span class="font-body-md text-white/60">Subtotal</span>
+<span class="font-body-md font-medium text-white">S/ 21.19</span>
+</div>
+<div class="flex justify-between items-center mb-6">
+<span class="font-body-md text-white/60">IGV (18%)</span>
+<span class="font-body-md font-medium text-white">S/ 3.81</span>
+</div>
+<div class="flex justify-between items-center mb-8 py-4 border-y border-white/10">
+<span class="font-headline-md">TOTAL</span>
+<span class="font-display-lg tracking-tight">S/ 25.00</span>
+</div>
+<button class="w-full bg-white text-black font-headline-md py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-white/90 transition-all duration-300 transform hover:scale-[1.02]">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">payments</span>
+                            Cobrar
+                        </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Section: IA Recommendations -->
+<div class="">
+<h4 class="font-label-md text-on-surface-variant mb-4 flex items-center gap-2 px-2">
+<span class="material-symbols-outlined text-[18px] text-primary">psychology</span>
+                Insights del Motor de Inteligencia Artificial
+            </h4>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Tarjeta 1: Asociación -->
+<div class="glass-panel rounded-3xl p-6 relative overflow-hidden transition-all hover:bg-white/90 cursor-default">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-2xl bg-white border border-black/5 flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[24px]">shopping_cart</span>
+</div>
+<div>
+<h5 class="font-label-sm text-on-surface-variant mb-2 uppercase tracking-wider">Asociación (Reglas)</h5>
+<p class="font-body-md text-primary">Basado en este producto, sugerimos ofrecer: <strong class="font-body-lg font-semibold block mt-1">Coca-Cola 1.5L</strong></p>
+</div>
+</div>
+</div>
+<!-- Tarjeta 2: Clasificación -->
+<div class="glass-panel rounded-3xl p-6 relative overflow-hidden transition-all hover:bg-white/90 cursor-default">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-2xl bg-white border border-black/5 flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[24px]">credit_card</span>
+</div>
+<div>
+<h5 class="font-label-sm text-on-surface-variant mb-2 uppercase tracking-wider">Clasificación</h5>
+<p class="font-body-md text-primary mb-3">Probabilidad de método de pago:</p>
+<div class="flex items-center gap-2">
+<span class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium">Yape 85%</span>
+<span class="bg-surface-container-low border border-black/5 text-on-surface-variant px-3 py-1.5 rounded-lg text-sm font-medium">Efectivo 15%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tarjeta 3: Ventas -->
+<div class="glass-panel rounded-3xl p-6 relative overflow-hidden transition-all hover:bg-white/90 cursor-default">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-2xl bg-white border border-black/5 flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[24px]">trending_up</span>
+</div>
+<div>
+<h5 class="font-label-sm text-on-surface-variant mb-2 uppercase tracking-wider">Predicción Ventas</h5>
+<p class="font-body-md text-primary">Ventas totales estimadas para hoy:</p>
+<p class="font-headline-md text-primary mt-2">S/ 1,250.00</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

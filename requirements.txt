@@ -3,8 +3,4 @@ pandas
 numpy
 matplotlib
 seaborn
-scikit-learn
-xgboost
-shap
-prophet
-mlxtend
+plotly
