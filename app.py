@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 
+try:
+    from src import panel_forecast
+except Exception:  # pragma: no cover - fallback for direct execution
+    import panel_forecast
+
 st.set_page_config(
     page_title="SmartBazar",
     page_icon="🛒",
@@ -652,59 +657,7 @@ elif opcion_sel == "Clasificación":
 #  5. PREDICCIONES (SERIES TEMPORALES)
 # ═══════════════════════════════════════════════════════════════
 elif opcion_sel == "Predicciones":
-    section_header("Pronóstico de Ventas (Prophet)", "Estimación de flujo de ingresos y comparación con feriados peruanos.")
-
-    c0, c1, c2, c3 = st.columns([1.2, 1, 1, 1])
-    with c0:
-        ctrl_header("Horizonte y Métrica")
-        horizonte = st.selectbox("Horizonte:", [7, 14, 30], index=1)
-        metrica_err = st.selectbox("Métrica de Error:", ["RMSE", "MAPE"])
-    with c1: kpi("Venta Est. (Mañana)", "S/ 1,285", "Pronóstico medio · IC 95%")
-    with c2:
-        if metrica_err == "RMSE":
-            kpi("RMSE Comparativo", "33.60 / 36.90", "Base vs con Feriados")
-        else:
-            kpi("MAPE Comparativo", "312% / 489%", "Base vs con Feriados")
-    with c3: kpi("Modelo Ganador", "Base", "RMSE 33.60 · sin feriados")
-
-    st.markdown("<div style='height: 1.2rem;'></div>", unsafe_allow_html=True)
-
-    tab1, tab2 = st.tabs(["📉 Proyección Temporal", "📊 Venta Diaria por Método de Pago"])
-
-    with tab1:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        np.random.seed(123)
-        fechas_hist = pd.date_range('2026-03-01', periods=30, freq='D')
-        ventas_hist = 1000 + 200*np.sin(np.arange(30)*2*np.pi/7) + np.random.normal(0, 80, 30)
-        ax.plot(fechas_hist, ventas_hist, color='#64748b', marker='o', markersize=3, label='Ventas Reales', linewidth=1.5)
-        fechas_fut = pd.date_range(fechas_hist[-1] + pd.Timedelta(days=1), periods=horizonte, freq='D')
-        ventas_fut = 1050 + 210*np.sin((np.arange(30, 30+horizonte))*2*np.pi/7)
-        ax.plot(fechas_fut, np.maximum(ventas_fut, 0), color='#000000', linewidth=2.5, linestyle='--', label='Pronóstico Prophet')
-        ax.fill_between(fechas_fut, np.maximum(ventas_fut*0.82, 0), ventas_fut*1.18, alpha=0.08, color='#000000', label='IC 95%')
-        apply_chart_style(fig, ax, title=f"Proyección de Ingresos a {horizonte} Días", ylabel="Ventas Totales (S/.)")
-        ax.legend(frameon=False, loc='upper left', fontsize=8)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with tab2:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        dias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-        efectivo = [320, 410, 390, 450, 520, 680, 750]
-        yape = [180, 210, 195, 230, 310, 420, 510]
-        x = np.arange(len(dias))
-        ax.bar(x - 0.18, efectivo, width=0.32, color='#000000', label='Efectivo (66.3%)')
-        ax.bar(x + 0.18, yape, width=0.32, color='#94a3b8', label='Yape (33.7%)')
-        ax.set_xticks(x)
-        ax.set_xticklabels(dias, fontweight='bold')
-        apply_chart_style(fig, ax, title="Venta Diaria Promedio por Método de Pago", ylabel="Ingreso Promedio (S/.)")
-        ax.legend(frameon=False, loc='upper left', fontsize=8)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
-    ic1, ic2 = st.columns(2)
-    with ic1: insight("Lógica de Flujo de Caja", "Permite al cajero anticipar cuánto efectivo/sencillo tener preparado cada mañana según el día de la semana.", badge="OPERACIÓN")
-    with ic2: insight("Restricción Matemática", "Se aplica yhat = max(x, 0) para impedir pronósticos de ventas negativas durante días de baja demanda.", badge="TÉCNICO")
+    panel_forecast.show_panel()
 
 
 # ═══════════════════════════════════════════════════════════════
