@@ -1,0 +1,9 @@
+Total Itemsets Frecuentes (min_support=0.01): 29
+Total Reglas generadas (Lift > 1.0): 6
+
+HOJAS DE COLORES -> CARTULINA | Sup: 0.018 | Conf: 58.62% | Lift: 5.45
+CARTULINA -> HOJAS DE COLORES | Sup: 0.018 | Conf: 16.83% | Lift: 5.45
+HOJA BOND -> CARTULINA | Sup: 0.020 | Conf: 55.88% | Lift: 5.20
+CARTULINA -> HOJA BOND | Sup: 0.020 | Conf: 18.81% | Lift: 5.20
+CARTULINA -> SILICONA | Sup: 0.012 | Conf: 10.89% | Lift: 2.18
+SILICONA -> CARTULINA | Sup: 0.012 | Conf: 23.40% | Lift: 2.18

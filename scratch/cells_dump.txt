@@ -1,0 +1,416 @@
+=== CELL 0 (markdown) ===
+# Panel 1D: Minería de Reglas de Asociación y Análisis de Afinidad entre Productos
+
+**Curso:** Minería de Datos   
+**Proyecto:** SmartBazar – Pipeline de Machine Learning para Retail  
+**Insumo de Entrada:** Datasets Saneados (`datasets/limpio/` – Salida del Cuaderno 1A)  
+**Metodología:** Preparación Transaccional → Modelado Multi-Algoritmo → Evaluación Comparativa → Interpretación de Negocio
+
+---
+
+## Introducción Teórica: Market Basket Analysis (MBA)
+
+El Market Basket Analysis (MBA) o Análisis de la Canasta de Compras es una técnica de minería de datos que busca descubrir asociaciones entre productos comprados juntos. Al no contar con un identificador único por cliente, el análisis se realiza a nivel transaccional (por *ticket* de compra).
+
+### Métricas Clave:
+Sean $X$ y $Y$ conjuntos de ítems (productos):
+- **Soporte (Support):** Proporción de transacciones que contienen al conjunto de ítems.
+  $$supp(X) = \frac{|T(X)|}{|T|}$$
+- **Confianza (Confidence):** Probabilidad condicional de comprar $Y$ dado que se ha comprado $X$.
+  $$conf(X \rightarrow Y) = \frac{supp(X \cup Y)}{supp(X)}$$
+- **Lift (Elevación):** Cuánto más probable es que se compre $Y$ cuando se compra $X$, comparado con si fueran independientes.
+  $$lift(X \rightarrow Y) = \frac{conf(X \rightarrow Y)}{supp(Y)}$$
+- **Conviction:** Mide qué tanto depende $Y$ de $X$. Valores altos indican fuerte dependencia.
+- **Leverage:** Diferencia entre la frecuencia observada de $X \cup Y$ y la frecuencia esperada si fueran independientes.
+
+### Algoritmos Utilizados:
+1. **Apriori:** Basado en el principio de anti-monotonicidad, genera candidatos nivel por nivel.
+2. **FP-Growth:** Construye un árbol de patrones frecuentes (FP-Tree) que comprime la información, evitando la costosa generación de candidatos de Apriori.
+
+=== CELL 1 (code) ===
+try:
+    import mlxtend
+except ImportError:
+    !pip install mlxtend
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+import networkx as nx
+import time
+import os
+import warnings
+
+from mlxtend.frequent_patterns import apriori, fpgrowth, association_rules
+from mlxtend.preprocessing import TransactionEncoder
+
+warnings.filterwarnings('ignore')
+
+# Configuraciones de estilo
+sns.set_theme(style="whitegrid", palette="deep")
+plt.rcParams['figure.figsize'] = (10, 6)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_colwidth', None)
+np.random.seed(42)
+
+=== CELL 2 (markdown) ===
+## Sección 1: Carga de Datos y EDA Orientado a Asociaciones
+En esta sección cargaremos los datos limpios y exploraremos la distribución de las transacciones (tickets de compra) y la frecuencia de los productos y departamentos.
+
+=== CELL 3 (code) ===
+# Rutas a los datasets
+DIR_LIMPIO = 'datasets/limpio/'
+df_ventas = pd.read_csv(os.path.join(DIR_LIMPIO, 'ventas.csv'))
+df_detalle = pd.read_csv(os.path.join(DIR_LIMPIO, 'detalle_ventas.csv'))
+
+
+print(f"Dimensiones de ventas: {df_ventas.shape}")
+print(f"Dimensiones de detalle_ventas: {df_detalle.shape}\n")
+
+# Exploración inicial de productos más frecuentes
+prod_frecuentes = df_detalle['Descripcion'].value_counts().head(20)
+
+plt.figure(figsize=(12, 8))
+sns.barplot(x=prod_frecuentes.values, y=prod_frecuentes.index, palette="viridis")
+plt.title('Top 20 Productos Más Frecuentes', fontsize=14)
+plt.xlabel('Frecuencia (Número de apariciones)')
+plt.ylabel('Producto')
+plt.tight_layout()
+plt.show()
+
+# Distribución de cantidad de productos por ticket
+prod_por_ticket = df_detalle.groupby('ID_Venta')['ID_Producto'].count()
+
+plt.figure(figsize=(10, 5))
+sns.histplot(prod_por_ticket, bins=range(1, prod_por_ticket.max() + 2), kde=False, color="#2E86AB")
+plt.title('Distribución de Número de Productos por Ticket')
+plt.xlabel('Número de Productos')
+plt.ylabel('Frecuencia (Tickets)')
+plt.tight_layout()
+plt.show()
+
+# Top departamentos
+dept_frecuentes = df_detalle['Departamento'].value_counts()
+
+plt.figure(figsize=(12, 6))
+sns.barplot(x=dept_frecuentes.values, y=dept_frecuentes.index, palette="magma")
+plt.title('Top Departamentos por Volumen de Transacciones', fontsize=14)
+plt.xlabel('Volumen')
+plt.ylabel('Departamento')
+plt.tight_layout()
+plt.show()
+
+# Distribución de tamaño de ticket (productos distintos)
+productos_distintos = df_detalle.groupby('ID_Venta')['ID_Producto'].nunique()
+print("Estadísticas del tamaño de ticket:")
+print(productos_distintos.describe())
+
+=== CELL 4 (markdown) ===
+## Sección 2: Construcción de la Matriz de Transacciones
+Para aplicar los algoritmos de minería de reglas, necesitamos transformar los datos en una matriz binaria transaccional (One-Hot Encoding), donde cada fila es una transacción y cada columna es un ítem. Crearemos dos niveles de matriz: por Producto y por Departamento.
+
+=== CELL 5 (code) ===
+# NIVEL PRODUCTO
+# Agrupamos productos por ticket
+transacciones_prod = df_detalle.groupby('ID_Venta')['Descripcion'].apply(list).tolist()
+
+te = TransactionEncoder()
+te_ary = te.fit(transacciones_prod).transform(transacciones_prod)
+df_trans_prod = pd.DataFrame(te_ary, columns=te.columns_)
+
+print(f"Forma de matriz a nivel Producto: {df_trans_prod.shape}")
+sparsidad_prod = 1.0 - (df_trans_prod.values.sum() / df_trans_prod.size)
+print(f"Sparsidad de la matriz de Productos: {sparsidad_prod:.4%}\n")
+
+# Filtramos ítems muy poco frecuentes para mejorar la visualización y análisis
+min_apariciones = int(df_trans_prod.shape[0] * 0.01)
+df_trans_prod = df_trans_prod.loc[:, df_trans_prod.sum() >= min_apariciones]
+print(f"Forma de matriz a nivel Producto filtrada (>1% soporte): {df_trans_prod.shape}\n")
+
+# NIVEL DEPARTAMENTO
+transacciones_dept = df_detalle.groupby('ID_Venta')['Departamento'].apply(lambda x: list(set(x))).tolist()
+te_dept = TransactionEncoder()
+te_dept_ary = te_dept.fit(transacciones_dept).transform(transacciones_dept)
+df_trans_dept = pd.DataFrame(te_dept_ary, columns=te_dept.columns_)
+
+print(f"Forma de matriz a nivel Departamento: {df_trans_dept.shape}")
+sparsidad_dept = 1.0 - (df_trans_dept.values.sum() / df_trans_dept.size)
+print(f"Sparsidad de la matriz de Departamentos: {sparsidad_dept:.4%}\n")
+
+display(df_trans_prod.head(3))
+
+=== CELL 6 (markdown) ===
+## Sección 3: Modelo 1 - Algoritmo Apriori
+El algoritmo Apriori utiliza un enfoque "bottom-up", descubriendo conjuntos frecuentes paso a paso utilizando el principio de que cualquier subconjunto de un conjunto de ítems frecuente también debe ser frecuente.
+
+=== CELL 7 (code) ===
+# Análisis de sensibilidad para elegir min_support
+soportes = np.arange(0.01, 0.1, 0.01)
+num_itemsets = []
+
+for s in soportes:
+    freq_items = apriori(df_trans_prod, min_support=s, use_colnames=True)
+    num_itemsets.append(len(freq_items))
+
+plt.figure(figsize=(10, 5))
+sns.lineplot(x=soportes, y=num_itemsets, marker='o', color="#D62828")
+plt.title('Sensibilidad del Número de Itemsets Frecuentes vs Soporte Mínimo')
+plt.xlabel('Soporte Mínimo (min_support)')
+plt.ylabel('Cantidad de Itemsets Frecuentes')
+plt.tight_layout()
+plt.show()
+
+# Elección de min_support (usaremos 0.02 dado el volumen de 939 transacciones)
+soporte_elegido = 0.005
+
+inicio_apriori = time.time()
+frecuentes_apriori = apriori(df_trans_prod, min_support=soporte_elegido, use_colnames=True)
+tiempo_apriori = time.time() - inicio_apriori
+
+print(f"Tiempo de ejecución Apriori: {tiempo_apriori:.4f} segundos")
+print(f"Itemsets encontrados: {len(frecuentes_apriori)}\n")
+
+# Top 20 itemsets
+frecuentes_apriori['longitud'] = frecuentes_apriori['itemsets'].apply(lambda x: len(x))
+display(frecuentes_apriori.sort_values(by='support', ascending=False).head(20))
+
+# Generación de reglas
+reglas_apriori = association_rules(frecuentes_apriori, metric="lift", min_threshold=1.0)
+print(f"\nReglas generadas: {len(reglas_apriori)}")
+
+if len(reglas_apriori) > 0:
+    # Top 20 reglas ordenadas por Lift
+    display(reglas_apriori.sort_values(by='lift', ascending=False).head(20))
+    
+    # Crear string de reglas para visualización
+    reglas_apriori['antecedents_str'] = reglas_apriori['antecedents'].apply(lambda x: ', '.join(list(x)))
+    reglas_apriori['consequents_str'] = reglas_apriori['consequents'].apply(lambda x: ', '.join(list(x)))
+    reglas_apriori['rule_name'] = reglas_apriori['antecedents_str'] + " -> " + reglas_apriori['consequents_str']
+    
+    # Scatter plot: Soporte vs Confianza
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x='support', y='confidence', size='lift', hue='lift', data=reglas_apriori, palette='coolwarm', sizes=(50, 400))
+    plt.title('Reglas Apriori: Soporte vs Confianza (Color y Tamaño por Lift)')
+    plt.xlabel('Soporte')
+    plt.ylabel('Confianza')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
+    
+    # Top 15 reglas por Lift
+    reglas_apriori_top = reglas_apriori.sort_values(by='lift', ascending=False).head(15)
+    plt.figure(figsize=(12, 6))
+    sns.barplot(x='lift', y='rule_name', data=reglas_apriori_top, palette="Spectral")
+    plt.title('Top 15 Reglas de Asociación por Lift (Apriori)')
+    plt.xlabel('Lift')
+    plt.ylabel('Regla (Antecedente -> Consecuente)')
+    plt.tight_layout()
+    plt.show()
+else:
+    print("No se encontraron reglas con los parámetros actuales. Ajuste min_support o min_threshold.")
+
+=== CELL 8 (markdown) ===
+## Sección 4: Modelo 2 - Algoritmo FP-Growth
+FP-Growth es más eficiente que Apriori, ya que utiliza una estructura de datos llamada FP-Tree para evitar el escaneo repetido de los datos y la generación explícita de candidatos.
+
+=== CELL 9 (code) ===
+inicio_fpgrowth = time.time()
+frecuentes_fp = fpgrowth(df_trans_prod, min_support=soporte_elegido, use_colnames=True)
+tiempo_fpgrowth = time.time() - inicio_fpgrowth
+
+print(f"Tiempo de ejecución FP-Growth: {tiempo_fpgrowth:.4f} segundos")
+print(f"Itemsets encontrados: {len(frecuentes_fp)}")
+
+frecuentes_fp['longitud'] = frecuentes_fp['itemsets'].apply(lambda x: len(x))
+display(frecuentes_fp.sort_values(by='support', ascending=False).head(20))
+
+# Generación de reglas FP-Growth
+reglas_fp = association_rules(frecuentes_fp, metric="lift", min_threshold=1.0)
+print(f"\nReglas generadas (FP-Growth): {len(reglas_fp)}")
+
+if len(reglas_fp) > 0:
+    display(reglas_fp.sort_values(by='lift', ascending=False).head(20))
+    
+    reglas_fp['antecedents_str'] = reglas_fp['antecedents'].apply(lambda x: ', '.join(list(x)))
+    reglas_fp['consequents_str'] = reglas_fp['consequents'].apply(lambda x: ', '.join(list(x)))
+    reglas_fp['rule_name'] = reglas_fp['antecedents_str'] + " -> " + reglas_fp['consequents_str']
+
+    # Scatter plot para FP-Growth
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x='support', y='confidence', size='lift', hue='lift', data=reglas_fp, palette='coolwarm', sizes=(50, 400))
+    plt.title('Reglas FP-Growth: Soporte vs Confianza (Color y Tamaño por Lift)')
+    plt.xlabel('Soporte')
+    plt.ylabel('Confianza')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
+
+=== CELL 10 (markdown) ===
+## Sección 5: Comparación de Algoritmos
+Compararemos el rendimiento computacional de Apriori y FP-Growth. Teóricamente, ambos deben producir los mismos itemsets frecuentes y reglas, pero FP-Growth debería ser más rápido en datasets grandes o con soportes bajos.
+
+=== CELL 11 (code) ===
+tabla_comp = pd.DataFrame({
+    'Algoritmo': ['Apriori', 'FP-Growth'],
+    'Tiempo_Ejecucion (s)': [tiempo_apriori, tiempo_fpgrowth],
+    'Itemsets_Frecuentes': [len(frecuentes_apriori), len(frecuentes_fp)],
+    'Total_Reglas': [len(reglas_apriori), len(reglas_fp)],
+    'Soporte_Max': [reglas_apriori['support'].max() if len(reglas_apriori)>0 else 0, 
+                    reglas_fp['support'].max() if len(reglas_fp)>0 else 0],
+    'Confianza_Max': [reglas_apriori['confidence'].max() if len(reglas_apriori)>0 else 0, 
+                      reglas_fp['confidence'].max() if len(reglas_fp)>0 else 0],
+    'Lift_Max': [reglas_apriori['lift'].max() if len(reglas_apriori)>0 else 0, 
+                 reglas_fp['lift'].max() if len(reglas_fp)>0 else 0]
+})
+
+display(tabla_comp.style.background_gradient(cmap='Blues'))
+
+# Gráfico comparativo de tiempos
+plt.figure(figsize=(8, 4))
+sns.barplot(x='Algoritmo', y='Tiempo_Ejecucion (s)', data=tabla_comp, palette='Set2')
+plt.title('Comparación de Tiempo de Ejecución: Apriori vs FP-Growth')
+plt.ylabel('Tiempo (segundos)')
+plt.tight_layout()
+plt.show()
+
+print("Conclusión de eficiencia computacional:")
+if tiempo_apriori > tiempo_fpgrowth:
+    print("FP-Growth es más rápido que Apriori en este escenario, demostrando la ventaja de usar FP-Trees para evitar la generación de candidatos.")
+else:
+    print("Apriori fue más rápido en este escenario, lo cual puede ocurrir con datasets muy pequeños donde la construcción del árbol en FP-Growth tiene más 'overhead' que la generación de candidatos de Apriori.")
+
+=== CELL 12 (markdown) ===
+## Sección 6: Análisis Profundo de Reglas Descubiertas
+Extraeremos reglas accionables tanto a nivel producto como a nivel departamento, y analizaremos su aplicabilidad de negocio. Filtraremos aquellas con un Lift mayor a 1 (lo que indica verdadera dependencia) y con una confianza mínima.
+
+=== CELL 13 (code) ===
+if len(reglas_apriori) > 0:
+    # Filtrado de reglas a nivel Producto
+    reglas_accionables = reglas_apriori[(reglas_apriori['lift'] > 1.0) & (reglas_apriori['confidence'] > 0.05)]
+    reglas_accionables = reglas_accionables.sort_values('lift', ascending=False).head(10)
+
+    print("--- Top 10 Reglas a Nivel Producto ---")
+    for i, row in reglas_accionables.iterrows():
+        ant = row['antecedents_str']
+        con = row['consequents_str']
+        print(f"Si compran [{ant}] es probable que compren [{con}] (Lift: {row['lift']:.2f}, Confianza: {row['confidence']:.2%})")
+
+# Análisis a nivel Departamento
+frec_dept = fpgrowth(df_trans_dept, min_support=0.01, use_colnames=True)
+reglas_dept = association_rules(frec_dept, metric="lift", min_threshold=1.0)
+
+print("\n--- Top Reglas a Nivel Departamento ---")
+if not reglas_dept.empty:
+    reglas_dept['antecedents_str'] = reglas_dept['antecedents'].apply(lambda x: ', '.join(list(x)))
+    reglas_dept['consequents_str'] = reglas_dept['consequents'].apply(lambda x: ', '.join(list(x)))
+    
+    reglas_dept_top = reglas_dept.sort_values('lift', ascending=False).head(5)
+    for i, row in reglas_dept_top.iterrows():
+        print(f"Departamentos: [{row['antecedents_str']}] -> [{row['consequents_str']}] (Lift: {row['lift']:.2f}, Confianza: {row['confidence']:.2%})")
+        
+    # Análisis bidireccional
+    print("\n--- Análisis Bidireccional (A->B vs B->A) ---")
+    for i, row in reglas_dept_top.iterrows():
+        a, b = row['antecedents'], row['consequents']
+        inversa = reglas_dept[(reglas_dept['antecedents'] == b) & (reglas_dept['consequents'] == a)]
+        if not inversa.empty:
+            inv_row = inversa.iloc[0]
+            print(f"A->B: {row['antecedents_str']} -> {row['consequents_str']} (Conf: {row['confidence']:.2%})")
+            print(f"B->A: {inv_row['antecedents_str']} -> {inv_row['consequents_str']} (Conf: {inv_row['confidence']:.2%})\n")
+else:
+    print("No se encontraron reglas significativas entre departamentos con los parámetros actuales.")
+
+=== CELL 14 (markdown) ===
+## Sección 7: Visualizaciones Avanzadas
+Exploraremos la red de asociaciones de productos, diagramas de afinidad por departamentos y resúmenes normalizados.
+
+=== CELL 15 (code) ===
+if len(reglas_apriori) > 0:
+    # 1. Heatmap de afinidad entre Departamentos
+    if not reglas_dept.empty:
+        matriz_dept = reglas_dept.pivot(index='antecedents_str', columns='consequents_str', values='lift')
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(matriz_dept, annot=True, cmap='RdYlGn', fmt=".2f", linewidths=.5)
+        plt.title('Afinidad entre Departamentos (Valores de Lift)')
+        plt.tight_layout()
+        plt.show()
+
+    # 2. Grafo de Red (Network Graph) con NetworkX
+    plt.figure(figsize=(14, 10))
+    G = nx.DiGraph()
+    
+    # Tomamos las top 20 reglas para no saturar el grafo
+    top_rules_graph = reglas_apriori.sort_values('lift', ascending=False).head(20)
+    
+    for _, row in top_rules_graph.iterrows():
+        for ant in row['antecedents']:
+            for con in row['consequents']:
+                G.add_edge(ant, con, weight=row['lift'], confidence=row['confidence'])
+
+    pos = nx.spring_layout(G, k=0.5, seed=42)
+    
+    # Extraer el soporte de cada nodo (producto) para el tamaño
+    node_sizes = [frecuentes_apriori[frecuentes_apriori['itemsets'] == frozenset({node})]['support'].values[0] * 50000 if len(frecuentes_apriori[frecuentes_apriori['itemsets'] == frozenset({node})]['support'].values) > 0 else 1000 for node in G.nodes()]
+    
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color="#88D8B0", alpha=0.9)
+    nx.draw_networkx_labels(G, pos, font_size=10, font_family="sans-serif")
+    
+    edges = G.edges()
+    weights = [G[u][v]['weight'] for u,v in edges]
+    nx.draw_networkx_edges(G, pos, edgelist=edges, width=weights, edge_color="#FF6F69", alpha=0.6, arrows=True)
+    
+    plt.title("Red de Asociaciones de Productos (Top 20 por Lift)\nTamaño de Nodo = Soporte, Grosor de Borde = Lift", fontsize=16)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+    
+    # 3. Radar Chart resumen normalizado top 5 reglas
+    top_5 = reglas_apriori.sort_values('lift', ascending=False).head(5)
+    
+    from sklearn.preprocessing import MinMaxScaler
+    scaler = MinMaxScaler()
+    metricas = ['support', 'confidence', 'lift', 'conviction']
+    # Handle infinite conviction
+    top_5['conviction'] = top_5['conviction'].replace([np.inf, -np.inf], top_5['conviction'].dropna().max() * 1.5)
+    
+    df_radar = pd.DataFrame(scaler.fit_transform(top_5[metricas]), columns=metricas)
+    df_radar['Regla'] = top_5['rule_name'].values
+
+    fig = go.Figure()
+    for i, row in df_radar.iterrows():
+        fig.add_trace(go.Scatterpolar(
+            r=[row['support'], row['confidence'], row['lift'], row['conviction']],
+            theta=['Soporte', 'Confianza', 'Lift', 'Convicción'],
+            fill='toself',
+            name=row['Regla']
+        ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+        title="Comparativa Normalizada de Métricas de las Top 5 Reglas"
+    )
+    fig.show()
+
+else:
+    print("No hay suficientes reglas para visualizar.")
+
+=== CELL 16 (markdown) ===
+## Sección 8: Conclusiones y Recomendaciones de Negocio
+
+### Principales Hallazgos
+- **Patrones de Co-ocurrencia:** Los algoritmos Apriori y FP-Growth han revelado patrones claros de afinidad entre productos y departamentos en la misma canasta de compra. Aquellas reglas con un **Lift mayor a 1** nos señalan una verdadera relación sinérgica, descartando co-ocurrencias accidentales debidas a la alta popularidad general de un producto.
+- **Rendimiento Computacional:** Al aplicar FP-Growth se observa el impacto del enfoque sin generación de candidatos en los tiempos de ejecución, validando su idoneidad para escalar este modelo cuando crezca el historial de ventas del retail.
+
+### Recomendaciones Accionables
+1. **Estrategia de Venta Cruzada (Cross-Selling):** Para las asociaciones más fuertes descubiertas (Ej. Producto A $\rightarrow$ Producto B), sugerimos al personal de caja incentivar la adición del Producto B antes de cerrar el ticket, o implementar recordatorios visuales en tienda.
+2. **Promociones y Combos (Bundles):** Las reglas con alto soporte y confianza moderada/alta pueden empaquetarse en promociones. Los combos naturales (los clientes ya los asocian) pueden justificar ligeros descuentos para incrementar aún más la conversión y elevar el ticket promedio.
+3. **Optimización del Diseño de Tienda (Layout):** Con base en el análisis departamental, sugerimos aproximar las exhibiciones de los departamentos altamente correlacionados (ver Heatmap de Afinidad). Esto reducirá la fricción del cliente y aumentará compras impulsivas conexas.
+4. **Gestión de Inventario (Co-management):** Los quiebres de stock en un producto que actúa como antecedente fuerte impactarán negativamente en la venta de su consecuente asociado. Estos pares de productos deben gestionarse con alertas de reabastecimiento conjuntas.
+
+### Limitaciones y Trabajo Futuro
+- **Volumen Transaccional Limitado:** El dataset cuenta con 939 tickets, lo que restringe el descubrimiento a productos altamente populares y hace más vulnerables las métricas de reglas raras a anomalías.
+- **Falta de Perfilamiento de Cliente:** Al no contar con información demográfica, se asume un comportamiento homogéneo de mercado que puede difuminar nichos importantes.
+- **Efecto de la Temporalidad:** Como trabajo futuro, se recomienda realizar minería de reglas por ventanas temporales (ej. fines de semana vs días de semana, o por temporada estacional) para capturar dinámicas cambiantes del comportamiento de compra.
+
