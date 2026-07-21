@@ -1,0 +1,19 @@
+{
+  "tipo_modelo": "XGBoost",
+  "columnas": [
+    "Total",
+    "n_items",
+    "n_productos_distintos",
+    "departamento_principal_enc",
+    "pct_fotocopiadora",
+    "dia_semana",
+    "es_fin_de_semana"
+  ],
+  "departamentos_clases": [
+    "FOTOCOPIADORA",
+    "UTILES"
+  ],
+  "xgboost_version": "3.3.0",
+  "sklearn_version": "1.6.1",
+  "archivo_booster": "modelo_metodo_pago_booster.json"
+}

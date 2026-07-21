@@ -6,6 +6,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+import pickle
+from src import panel_predictivo
 
 st.set_page_config(
     page_title="SmartBazar",
@@ -595,57 +597,10 @@ elif opcion_sel == "Reglas de Asociación":
 
 
 # ═══════════════════════════════════════════════════════════════
-#  4. CLASIFICACIÓN
+#  4. CLASIFICACIÓN  (bloque corregido — usa modelo y resultados REALES)
 # ═══════════════════════════════════════════════════════════════
 elif opcion_sel == "Clasificación":
-    section_header("Clasificación Predictiva de Método de Pago", "Evaluación comparativa de Random Forest vs XGBoost y explicabilidad con SHAP.")
-
-    # ── Control + KPIs en fila ──
-    c0, c1, c2, c3 = st.columns([1.2, 1, 1, 1])
-    with c0:
-        ctrl_header("Selector de Algoritmo")
-        mod_sel = st.selectbox("Modelo:", ["XGBoost (Recomendado)", "Random Forest"])
-
-    if "XGBoost" in mod_sel:
-        f1_v, acc_v, auc_v = "0.400", "58.5%", "0.901"
-        cm = np.array([[151, 26], [25, 90]])
-    else:
-        f1_v, acc_v, auc_v = "0.387", "61.2%", "0.883"
-        cm = np.array([[145, 32], [28, 87]])
-
-    with c1: kpi("F1-Score", f1_v, "class_weight = 'balanced'")
-    with c2: kpi("Accuracy", acc_v, "Tasa de aciertos en test")
-    with c3: kpi("ROC-AUC", auc_v, "Capacidad de discriminación")
-
-    st.markdown("<div style='height: 1.2rem;'></div>", unsafe_allow_html=True)
-
-    tab1, tab2 = st.tabs(["🧮 Matriz de Confusión", "💡 Importancia SHAP"])
-
-    with tab1:
-        fig, ax = plt.subplots(figsize=(6, 4))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Greys", cbar=False, xticklabels=["Pred: EFECTIVO", "Pred: YAPE"], yticklabels=["Real: EFECTIVO", "Real: YAPE"], annot_kws={"size": 16, "weight": "bold"}, ax=ax, linewidths=2, linecolor='white')
-        apply_chart_style(fig, ax, title=f"Matriz de Confusión — {mod_sel}")
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with tab2:
-        fig, ax = plt.subplots(figsize=(10, 3.5))
-        features = ["Total_Ticket", "Es_Fin_de_Semana", "pct_Fotocopiadora", "n_items", "es_cliente_recurrente"]
-        importancias = [0.38, 0.24, 0.18, 0.12, 0.08]
-        bars = ax.barh(range(len(features)), importancias, color='#0f172a', edgecolor='white', height=0.5)
-        ax.set_yticks(range(len(features)))
-        ax.set_yticklabels(features, fontweight='bold', fontsize=9, color='#000000')
-        ax.invert_yaxis()
-        for bar, v in zip(bars, importancias):
-            ax.text(bar.get_width() + 0.008, bar.get_y() + bar.get_height()/2, f'{v:.2f}', va='center', fontsize=8, fontweight='bold', color='#000000')
-        apply_chart_style(fig, ax, title="Importancia Global de Variables (|SHAP value|)", xlabel="Impacto Medio Absoluto")
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
-    ic1, ic2 = st.columns(2)
-    with ic1: insight("Preferencia por F1-Score", "El desbalance Efectivo (66.3%) vs Yape (33.7%) invalida la Accuracy como métrica principal. El F1-Score pondera Precision y Recall equitativamente.", badge="JUSTIFICACIÓN TÉCNICA")
-    with ic2: insight("Explicabilidad Financiera", "Montos altos y compras en fin de semana son los impulsores clave del uso de billeteras digitales (Yape) sobre el efectivo.", badge="SHAP INSIGHT")
+    panel_predictivo.render()
 
 
 # ═══════════════════════════════════════════════════════════════
