@@ -222,11 +222,11 @@ xychart-beta
     title "Evolución y Pronóstico de Ventas (S/)"
     x-axis "Semanas" ["Sem 1", "Sem 2", "Sem 3", "Sem 4 (Actual)", "Sem 5 (Proy)", "Sem 6 (Proy)", "Sem 7 (Proy)", "Sem 8 (Proy)"]
     y-axis "Soles (S/)" 0 --> 3000
-    line "Ventas Reales" [1500, 1800, 1400, 2100, , , , ]
-    line "Prophet Ajuste" [1450, 1750, 1420, 2050, , , , ]
-    line "Prophet Futuro" [, , , 2050, 1900, 2300, 1800, 1600]
-    line "Media Móvil" [1500, 1500, 1650, 1560, , , , ]
+    line "Ventas Reales" [1500, 1800, 1400, 2100, 2100, 2100, 2100, 2100]
+    line "Prophet (Modelo)" [1450, 1750, 1420, 2050, 1900, 2300, 1800, 1600]
+    line "Media Móvil" [1500, 1500, 1650, 1560, 1560, 1560, 1560, 1560]
 ```
+> **Nota de visualización:** Debido a las restricciones de renderizado de `xychart-beta` en GitHub (que requiere que todos los vectores tengan exactamente la misma longitud y valores numéricos), las *Ventas Reales* y *Media Móvil* se representan como una línea plana después de la "Semana 4" para permitir la visualización de la proyección de Prophet. En el dashboard real (Plotly), estas líneas se cortan donde terminan los datos históricos.
 
 **Interpretación del Resultado:**
 * **Tendencia:** La línea principal muestra el histórico de ventas agregadas. Prophet (Ajuste) logra mimetizar los picos y valles de las "Ventas Reales" gracias a que toma en cuenta el **Día de la Semana** y los **Regresores Exógenos** (Feriados/Colegios).
