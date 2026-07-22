@@ -1,5 +1,7 @@
 from pathlib import Path
+from dateutil import parser
 import pickle
+import holidays
 
 try:
     import joblib
@@ -26,11 +28,14 @@ except Exception:  # pragma: no cover - fallback for direct execution
     from data_loader import load_ventas
 
 
-MODEL_PATH = Path(__file__).resolve().with_name("final_prophet_model.joblib")
-MA_MODEL_PATH = Path(__file__).resolve().with_name("ma_model_params.joblib")
+MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "final_prophet_model.joblib"
+MA_MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "ma_model_params.joblib"
 
 
 def _inject_styles() -> None:
+    """
+    Inyecta estilos CSS personalizados en la aplicación Streamlit para mejorar la apariencia del panel de pronóstico.
+    """
     st.markdown(
         """
         <style>
@@ -42,7 +47,7 @@ def _inject_styles() -> None:
         }
 
         .forecast-root {
-            background: linear-gradient(180deg, #faf8f5 0%, #f5f4f1 100%);
+            background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
             color: #111111;
         }
 
@@ -126,11 +131,11 @@ def _inject_styles() -> None:
         }
 
         .metric-positive {
-            color: #0f766e;
+            color: #111827;
         }
 
         .metric-accent {
-            color: #1d4ed8;
+            color: #374151;
         }
 
         .forecast-shell {
@@ -167,8 +172,8 @@ def _inject_styles() -> None:
         }
 
         .sidebar-item.active {
-            background: #c9f6d7;
-            color: #0f172a;
+            background: #000000;
+            color: #ffffff;
         }
 
         .sidebar-divider {
@@ -213,6 +218,23 @@ def _inject_styles() -> None:
         div[data-testid="stSlider"] [data-baseweb="slider"] {
             border-radius: 12px !important;
         }
+
+        /* Estilo para el slider negro */
+        div[data-testid="stSlider"] [role="slider"] {
+            background-color: #000000 !important;
+            border: 2px solid #ffffff !important;
+            box-shadow: 0 0 0 2px #000000 !important;
+        }
+
+        div[data-testid="stSlider"] [data-baseweb="slider"] > div > div {
+            filter: grayscale(100%) brightness(30%) contrast(150%) !important;
+        }
+
+        /* Quitar texto blanco de los extremos de los sliders */
+        div[data-testid="stSlider"] [data-testid="stTickBarMin"],
+        div[data-testid="stSlider"] [data-testid="stTickBarMax"] {
+            display: none !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -220,14 +242,23 @@ def _inject_styles() -> None:
 
 
 def _currency(value: float) -> str:
+    """
+    Formatea un valor numérico como moneda peruana (S/), con separadores de miles y sin decimales.
+    """
     return f"S/ {value:,.0f}".replace(",", ".")
 
 
 def _currency_2(value: float) -> str:
+    """
+    Formatea un valor numérico como moneda peruana (S/), con separadores de miles y dos decimales.
+    """
     return f"S/ {value:,.2f}".replace(",", ".")
 
 
 def _apply_chart_style(fig, ax, title: str = "", xlabel: str = "", ylabel: str = ""):
+    """
+    Aplica un estilo visual consistente a los gráficos de Matplotlib.
+    """
     fig.patch.set_facecolor("#ffffff")
     ax.set_facecolor("#ffffff")
     ax.tick_params(colors="#64748b", labelsize=8)
@@ -246,6 +277,9 @@ def _apply_chart_style(fig, ax, title: str = "", xlabel: str = "", ylabel: str =
 
 
 def _safe_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[float, float]:
+    """
+    Calcula las métricas RMSE y MAPE de manera segura, manejando la posible división por cero en el cálculo de MAPE.
+    """
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
@@ -253,14 +287,49 @@ def _safe_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[float, float]
     mape = float(np.mean(np.abs((y_true - y_pred) / denom)) * 100.0)
     return rmse, mape
 
+def parsear_fechas_cronologicas(fechas):
+    """
+    Toma una lista de fechas en formato string y devuelve una lista de fechas en formato datetime.
+    """
+    fechas_limpias = []
+    fecha_anterior = pd.Timestamp.min
+
+    for fecha_str in fechas:
+        if pd.isna(fecha_str):
+            fechas_limpias.append(pd.NaT)
+            continue
+
+        try:
+            d1 = parser.parse(str(fecha_str), dayfirst=True)
+            d2 = parser.parse(str(fecha_str), dayfirst=False)
+
+            if d1 == d2:
+                fecha_elegida = d1
+            elif d1 >= fecha_anterior and d2 < fecha_anterior:
+                fecha_elegida = d1
+            elif d2 >= fecha_anterior and d1 < fecha_anterior:
+                fecha_elegida = d2
+            else:
+                fecha_elegida = d1 if (d1 - fecha_anterior) < (d2 - fecha_anterior) else d2
+
+            fechas_limpias.append(fecha_elegida)
+            fecha_anterior = fecha_elegida
+        except Exception:
+            fechas_limpias.append(pd.NaT)
+
+    return fechas_limpias
 
 @st.cache_data(show_spinner=False)
 def _load_sales_data() -> pd.DataFrame:
+    """
+    Carga y prepara los datos de ventas desde el archivo ventas.csv.
+    Devuelve un DataFrame con las columnas 'Fecha', 'Total' y 'Fecha_Diaria'.
+    """
     df = load_ventas(limpio=True)
     df = df.copy()
     if "Fecha" not in df.columns or "Total" not in df.columns:
         raise ValueError("El archivo ventas.csv debe incluir las columnas 'Fecha' y 'Total'.")
-    df["Fecha"] = pd.to_datetime(df["Fecha"], format="mixed", errors="coerce")
+    df["Fecha"] = pd.to_datetime(parsear_fechas_cronologicas(df["Fecha"]))
     df["Total"] = pd.to_numeric(df["Total"], errors="coerce")
     df = df.dropna(subset=["Fecha", "Total"])
     cutoff_date = pd.Timestamp.now().normalize()
@@ -270,6 +339,9 @@ def _load_sales_data() -> pd.DataFrame:
 
 
 def _build_school_dates(years: list[int]) -> pd.DatetimeIndex:
+    """
+    Construye un índice de fechas que representan los periodos escolares para los años especificados.
+    """
     school_ranges = []
     for year in years:
         school_ranges.append(pd.date_range(f"{year}-03-01", periods=30, freq="D"))
@@ -283,9 +355,14 @@ def _build_school_dates(years: list[int]) -> pd.DatetimeIndex:
 
 
 def _build_regressors(df: pd.DataFrame, years: list[int]) -> pd.DataFrame:
+    """
+    Construye un DataFrame de regresores para el modelo de pronóstico. 
+    Donde:
+    - 'ds' es la fecha.
+    - 'is_nat' indica si la fecha es un feriado nacional.
+    - 'is_school' indica si la fecha cae dentro de un periodo escolar.
+    """
     try:
-        import holidays
-
         pe_holidays = holidays.country_holidays("PE", years=years)
         hols_df = pd.DataFrame({"ds": pd.to_datetime(list(pe_holidays.keys())), "is_nat": 1})
     except Exception:
@@ -299,7 +376,7 @@ def _build_regressors(df: pd.DataFrame, years: list[int]) -> pd.DataFrame:
     if not hols_df.empty:
         hols_weekly = (
             hols_df.set_index("ds")
-            .resample("W-MON")
+            .resample("W-SUN")
             .max()
             .fillna(0)
             .reset_index()
@@ -311,7 +388,7 @@ def _build_regressors(df: pd.DataFrame, years: list[int]) -> pd.DataFrame:
     if not school_df.empty:
         school_weekly = (
             school_df.set_index("ds")
-            .resample("W-MON")
+            .resample("W-SUN")
             .max()
             .fillna(0)
             .reset_index()
@@ -330,13 +407,17 @@ def _build_regressors(df: pd.DataFrame, years: list[int]) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def _prepare_weekly_data() -> pd.DataFrame:
+    """
+    Prepara los datos de ventas para el modelo de pronóstico, agregando las ventas diarias y semanales,
+    y construyendo los regresores necesarios.
+    """
     df_raw = _load_sales_data()
     ingreso_diario = df_raw.groupby("Fecha_Diaria")["Total"].sum().sort_index().to_frame()
     full_range = pd.date_range(start=ingreso_diario.index.min(), end=ingreso_diario.index.max(), freq="D")
     ingreso_diario = ingreso_diario.reindex(full_range, fill_value=0)
     ingreso_diario.index.name = "Fecha_Diaria"
 
-    weekly_df = ingreso_diario.resample("W-MON").sum().reset_index()
+    weekly_df = ingreso_diario.resample("W-SUN").sum().reset_index()
     weekly_df.columns = ["ds", "y"]
     weekly_df = weekly_df.sort_values("ds").reset_index(drop=True)
 
@@ -349,6 +430,9 @@ def _prepare_weekly_data() -> pd.DataFrame:
 
 @st.cache_resource(show_spinner=False)
 def _load_model():
+    """
+    Carga el modelo Prophet desde un archivo joblib.
+    """
     if not MODEL_PATH.exists():
         raise FileNotFoundError(f"No se encontró el modelo en {MODEL_PATH}")
     try:
@@ -362,6 +446,9 @@ def _load_model():
 
 @st.cache_resource(show_spinner=False)
 def _load_ma_params() -> dict:
+    """
+    Carga los parámetros del modelo de media móvil desde un archivo joblib.
+    """
     if not MA_MODEL_PATH.exists():
         raise FileNotFoundError(f"No se encontró el modelo de media móvil en {MA_MODEL_PATH}")
     try:
@@ -371,6 +458,10 @@ def _load_ma_params() -> dict:
 
 
 def _fit_forecast_frame(model, weekly_df: pd.DataFrame, horizon_weeks: int):
+    """
+    Ajusta el marco de pronóstico utilizando el modelo Prophet y los datos semanales.
+    Devuelve dos DataFrames: uno con el pronóstico histórico y otro con el pronóstico futuro.
+    """
     years = list(range(int(weekly_df["ds"].dt.year.min()), int(weekly_df["ds"].dt.year.max()) + 3))
     history_features = _build_regressors(weekly_df[["ds"]], years)
     history_features = history_features.merge(weekly_df[["ds", "y"]], on="ds", how="left")
@@ -381,7 +472,7 @@ def _fit_forecast_frame(model, weekly_df: pd.DataFrame, horizon_weeks: int):
     forecast_hist["yhat_lower_original"] = np.expm1(forecast_hist["yhat_lower"]).clip(lower=0)
     forecast_hist["yhat_upper_original"] = np.expm1(forecast_hist["yhat_upper"]).clip(lower=0)
 
-    future = model.make_future_dataframe(periods=horizon_weeks, freq="W-MON")
+    future = model.make_future_dataframe(periods=horizon_weeks, freq="W-SUN")
     future = future.drop_duplicates("ds").sort_values("ds").reset_index(drop=True)
     future = future.merge(_build_regressors(future[["ds"]], years), on="ds", how="left").fillna(0)
     forecast_future = model.predict(future[["ds", "is_nat", "is_school"]])
@@ -393,11 +484,15 @@ def _fit_forecast_frame(model, weekly_df: pd.DataFrame, horizon_weeks: int):
 
 
 def _fit_moving_average_frame(weekly_df: pd.DataFrame, horizon_weeks: int, window: int, last_mean: float):
+    """
+    Ajusta el marco de pronóstico utilizando un modelo de media móvil.
+    Devuelve dos DataFrames: uno con el pronóstico histórico y otro con el pronóstico futuro.
+    """
     history = weekly_df[["ds", "y"]].copy()
     history["ma_pred"] = history["y"].rolling(window=window, min_periods=1).mean().shift(1)
     history["ma_pred"] = history["ma_pred"].fillna(last_mean)
 
-    future_dates = pd.date_range(weekly_df["ds"].max() + pd.Timedelta(days=7), periods=horizon_weeks, freq="W-MON")
+    future_dates = pd.date_range(weekly_df["ds"].max() + pd.Timedelta(days=7), periods=horizon_weeks, freq="W-SUN")
     future = pd.DataFrame({
         "ds": future_dates,
         "ma_pred": np.full(horizon_weeks, float(last_mean)),
@@ -406,6 +501,9 @@ def _fit_moving_average_frame(weekly_df: pd.DataFrame, horizon_weeks: int, windo
 
 
 def _render_metric_card(title: str, value: str, note: str, accent: bool = False, positive: bool = False) -> None:
+    """
+    Renderiza una tarjeta de métrica en la interfaz de usuario de Streamlit.
+    """
     classes = "metric-card"
     value_class = "metric-value"
     note_class = "metric-note"
@@ -425,6 +523,9 @@ def _render_metric_card(title: str, value: str, note: str, accent: bool = False,
 
 
 def _build_backtest_frame(history_df: pd.DataFrame, prophet_hist: pd.DataFrame, ma_history: pd.DataFrame, window: int = 4) -> pd.DataFrame:
+    """
+    Construye un DataFrame de backtesting que contiene las métricas de error (MAPE y RMSE) para los modelos Prophet y Media Móvil.
+    """
     merged = history_df[["ds", "y"]].merge(prophet_hist[["ds", "yhat_original"]], on="ds", how="left")
     merged = merged.merge(ma_history[["ds", "ma_pred"]], on="ds", how="left")
     recent = merged.tail(window).copy().reset_index(drop=True)
@@ -438,31 +539,38 @@ def _build_backtest_frame(history_df: pd.DataFrame, prophet_hist: pd.DataFrame, 
 
 
 def show_panel():
-    """Panel 5 - Pronostico de Ingresos con Prophet."""
+    """
+    Panel 5 - Pronostico de Ingresos con Prophet.
+    """
 
     _inject_styles()
 
+    # Cargar el modelo Prophet y los datos semanales
     try:
         model = _load_model()
     except Exception as exc:
         st.error(f"No se pudo cargar el modelo Prophet: {exc}")
         return
 
+    # Preparar los datos semanales desde ventas.csv
     try:
         weekly_df = _prepare_weekly_data()
     except Exception as exc:
         st.error(f"No se pudo preparar la serie semanal desde ventas.csv: {exc}")
         return
 
+    # Cargar los parámetros del modelo de media móvil
     try:
         ma_params = _load_ma_params()
     except Exception as exc:
         st.error(f"No se pudo cargar el modelo de media móvil: {exc}")
         return
 
+    # Renderizar la interfaz de usuario del panel de pronóstico
     st.markdown("<div class='forecast-root'>", unsafe_allow_html=True)
     left_col, right_col = st.columns([0.24, 0.76], gap="large")
 
+    # Renderizar la barra lateral con información y controles
     with left_col:
         st.markdown(
             "<div class='sidebar-card'>"
@@ -472,10 +580,7 @@ def show_panel():
             "<div class='sidebar-item'>Rango de fechas</div>"
             "<div class='sidebar-item'>Campanas escolares</div>"
             "<div class='sidebar-item'>Festivos</div>"
-            "<div class='sidebar-item'>Modelos predictivos</div>"
-            "<div class='sidebar-divider'></div>"
-            "<div class='footer-note'>La serie se construye desde ventas.csv y el modelo Prophet se carga desde final_prophet_model.joblib.</div>"
-            "</div>",
+            "<div class='sidebar-item'>Modelos predictivos</div>",
             unsafe_allow_html=True,
         )
 
@@ -485,20 +590,21 @@ def show_panel():
         st.markdown("<div class='section-caption'>Controla la ventana futura del modelo.</div>", unsafe_allow_html=True)
 
         horizon_options = [4, 8, 12, 16, 24, 52]
-        horizon_weeks = st.selectbox(
+        horizon_weeks = st.select_slider(
             "Horizonte de prediccion",
             options=horizon_options,
-            index=0,
+            value=4,
             format_func=lambda value: f"Proximas {value} semanas",
         )
-        focus_year = st.selectbox(
+        focus_year = st.select_slider(
             "Vista de analisis",
             options=["Resumen temporal", "Ultimas 8 semanas", "Ultimas 12 semanas"],
-            index=0,
+            value="Resumen temporal",
         )
         run_model = st.button("Ejecutar modelo", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+    # Renderizar la sección principal con los resultados del pronóstico
     with right_col:
         forecast_hist, forecast_future = _fit_forecast_frame(model, weekly_df, horizon_weeks)
         ma_history, ma_future = _fit_moving_average_frame(
@@ -553,12 +659,13 @@ def show_panel():
             f"<div class='panel-card' style='min-width: 340px; margin: 0;'>"
             f"<div class='section-title'>Horizonte de Prediccion</div>"
             f"<div class='section-caption'>Próximas {horizon_weeks} semanas</div>"
-            f"<div style='font-size: 1.55rem; font-weight: 800; color: #1d4ed8;'>Semana de arranque: {next_forecast['ds'].strftime('%d/%m/%Y')}</div>"
+            f"<div style='font-size: 1.55rem; font-weight: 800; color: #111827;'>Semana de arranque: {next_forecast['ds'].strftime('%d/%m/%Y')}</div>"
             "</div>"
             "</div>",
             unsafe_allow_html=True,
         )
 
+        # Renderizar las tarjetas de métricas con los resultados del pronóstico y las evaluaciones de los modelos
         metric_cols = st.columns(6, gap="small")
         with metric_cols[0]:
             _render_metric_card("Ventas Historicas", _currency(total_history), f"Ultima semana: {_currency_2(last_hist['y'])}", positive=True)
@@ -582,21 +689,27 @@ def show_panel():
             unsafe_allow_html=True,
         )
 
+        # Renderizar el gráfico principal con las ventas reales, el pronóstico de Prophet, el intervalo de confianza y la media móvil
         fig_main, ax_main = plt.subplots(figsize=(11.6, 4.2))
         _apply_chart_style(fig_main, ax_main)
-        ax_main.plot(weekly_df["ds"], weekly_df["y"], color="#1d4ed8", linewidth=1.4, label="Ventas Reales")
-        ax_main.plot(forecast_hist["ds"], forecast_hist["yhat_original"], color="#10b981", linewidth=1.8, linestyle=":", label="Prophet Forecast")
+        ax_main.plot(weekly_df["ds"], weekly_df["y"], color="#000000", linewidth=2.0, label="Ventas Reales")
+        ax_main.plot(forecast_hist["ds"], forecast_hist["yhat_original"], color="#737373", linewidth=1.8, linestyle=":", label="Prophet Ajuste")
+        prophet_future_plot = forecast_future[forecast_future["ds"] >= weekly_df["ds"].max()]
+        ax_main.plot(prophet_future_plot["ds"], prophet_future_plot["yhat_original"], color="#1f2937", linewidth=2.0, linestyle="--", label="Prophet Futuro")
         ax_main.fill_between(
-            forecast_hist["ds"],
-            forecast_hist["yhat_lower_original"],
-            forecast_hist["yhat_upper_original"],
-            color="#f59e0b",
-            alpha=0.12,
+            forecast_future["ds"],
+            forecast_future["yhat_lower_original"],
+            forecast_future["yhat_upper_original"],
+            color="#000000",
+            alpha=0.08,
             label="Intervalo de Confianza",
         )
+
+
+        # Calcular la media móvil de las ventas reales para el gráfico
         ma_line = weekly_df["y"].rolling(window=3, min_periods=1).mean()
-        ax_main.plot(ma_history["ds"], ma_history["ma_pred"], color="#f97316", linewidth=1.2, alpha=0.75, label="Media Movil")
-        ax_main.plot(ma_future["ds"], ma_future["ma_pred"], color="#f97316", linewidth=1.2, alpha=0.35, linestyle="--")
+        ax_main.plot(ma_history["ds"], ma_history["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.8, label="Media Movil")
+        ax_main.plot(ma_future["ds"], ma_future["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.4, linestyle="--")
         ax_main.scatter([next_forecast["ds"]], [next_forecast["yhat_original"]], color="#111827", s=28, zorder=5)
         ax_main.annotate(
             f"Hoy S/ {next_forecast['yhat_original']:,.0f}".replace(",", "."),
@@ -609,7 +722,7 @@ def show_panel():
         )
         ax_main.set_xlabel("Fecha")
         ax_main.set_ylabel("Ventas (S/)")
-        ax_main.legend(frameon=False, ncol=4, fontsize=7, loc="upper left")
+        ax_main.legend(frameon=False, ncol=5, fontsize=7, loc="upper left")
         fig_main.autofmt_xdate()
         fig_main.tight_layout()
         st.pyplot(fig_main, use_container_width=True)
@@ -618,6 +731,7 @@ def show_panel():
 
         bottom_left, bottom_right = st.columns([1.05, 0.95], gap="large")
 
+        # Renderizar la sección de predicciones futuras con detalles del horizonte seleccionado
         with bottom_left:
             st.markdown(
                 "<div class='panel-card'><div class='section-title'>Predicciones Futuras</div><div class='section-caption'>Detalle del horizonte seleccionado.</div>",
@@ -646,6 +760,7 @@ def show_panel():
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
+        # Renderizar la sección de errores semanales (MAPE y RMSE) para ambos modelos
         with bottom_right:
             st.markdown(
                 "<div class='panel-card'><div class='section-title'>Error Semanal (MAPE y RMSE)</div><div class='section-caption'>Ambos errores se muestran simultaneamente sin selector.</div>",
@@ -658,34 +773,34 @@ def show_panel():
                 _apply_chart_style(fig_err_mape, ax_err_mape)
                 x = np.arange(len(error_df))
                 width = 0.33
-                ax_err_mape.bar(x - width / 2, error_df["prophet_mape"], width=width, color="#047857", label="Prophet")
-                ax_err_mape.bar(x + width / 2, error_df["ma_mape"], width=width, color="#efc0c0", label="Media Movil")
+                ax_err_mape.bar(x - width / 2, error_df["prophet_mape"], width=width, color="#000000", label="Prophet")
+                ax_err_mape.bar(x + width / 2, error_df["ma_mape"], width=width, color="#d4d4d8", label="Media Movil")
                 ax_err_mape.set_xticks(x)
                 ax_err_mape.set_xticklabels(error_df["semana"], fontsize=7)
                 ax_err_mape.set_ylabel("MAPE (%)")
                 ax_err_mape.set_xlabel("Semana")
                 ax_err_mape.legend(frameon=False, fontsize=7, loc="upper left")
                 for idx, value in enumerate(error_df["prophet_mape"]):
-                    ax_err_mape.text(idx - width / 2, value + 0.3, f"{value:.1f}%", ha="center", va="bottom", fontsize=7, color="#047857", fontweight="bold")
+                    ax_err_mape.text(idx - width / 2, value + 0.3, f"{value:.1f}%", ha="center", va="bottom", fontsize=7, color="#000000", fontweight="bold")
                 for idx, value in enumerate(error_df["ma_mape"]):
-                    ax_err_mape.text(idx + width / 2, value + 0.3, f"{value:.1f}%", ha="center", va="bottom", fontsize=7, color="#9f1239", fontweight="bold")
+                    ax_err_mape.text(idx + width / 2, value + 0.3, f"{value:.1f}%", ha="center", va="bottom", fontsize=7, color="#52525b", fontweight="bold")
                 st.pyplot(fig_err_mape, use_container_width=True)
                 plt.close(fig_err_mape)
 
             with err_right:
                 fig_err_rmse, ax_err_rmse = plt.subplots(figsize=(4.3, 4.2))
                 _apply_chart_style(fig_err_rmse, ax_err_rmse)
-                ax_err_rmse.bar(x - width / 2, error_df["prophet_rmse"], width=width, color="#1d4ed8", label="Prophet")
-                ax_err_rmse.bar(x + width / 2, error_df["ma_rmse"], width=width, color="#f97316", label="Media Movil")
+                ax_err_rmse.bar(x - width / 2, error_df["prophet_rmse"], width=width, color="#000000", label="Prophet")
+                ax_err_rmse.bar(x + width / 2, error_df["ma_rmse"], width=width, color="#d4d4d8", label="Media Movil")
                 ax_err_rmse.set_xticks(x)
                 ax_err_rmse.set_xticklabels(error_df["semana"], fontsize=7)
                 ax_err_rmse.set_ylabel("RMSE")
                 ax_err_rmse.set_xlabel("Semana")
                 ax_err_rmse.legend(frameon=False, fontsize=7, loc="upper left")
                 for idx, value in enumerate(error_df["prophet_rmse"]):
-                    ax_err_rmse.text(idx - width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#1d4ed8", fontweight="bold")
+                    ax_err_rmse.text(idx - width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#000000", fontweight="bold")
                 for idx, value in enumerate(error_df["ma_rmse"]):
-                    ax_err_rmse.text(idx + width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#f97316", fontweight="bold")
+                    ax_err_rmse.text(idx + width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#52525b", fontweight="bold")
                 st.pyplot(fig_err_rmse, use_container_width=True)
                 plt.close(fig_err_rmse)
 
