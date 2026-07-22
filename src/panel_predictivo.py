@@ -1,419 +1,326 @@
-import streamlit as st
-import pandas as pd
+"""
+Panel de Clasificación — Predicción de Método de Pago (YAPE vs EFECTIVO)
+Persona 2 del proyecto SmartBazar.
+
+Este módulo es autocontenido: no depende de variables globales de app.py.
+Se apoya en 3 archivos generados por el notebook Panel_2_Prediccion_Metodo_Pago:
+  - models/modelo_metodo_pago.json          (metadatos + encoder de departamento)
+  - models/modelo_metodo_pago_booster.json  (booster de XGBoost en formato nativo,
+                                              solo existe si el modelo ganador es XGBoost)
+  - models/resultados_panel4.json           (métricas, matrices de confusión, importancias)
+"""
+
+import os
+import json
+import base64
+import hashlib
+import pickle
+
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import streamlit as st
+from sklearn.preprocessing import LabelEncoder
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Utilidades de estilo para gráficos con tema oscuro
+# Rutas — ancladas a la ubicación real de este archivo, no al directorio
+# desde el que se ejecute streamlit run (evita bugs de ruta relativa)
 # ─────────────────────────────────────────────────────────────────────
-def _apply_dark_style(fig, ax, title=""):
-    """Aplica el tema claro premium a una figura matplotlib."""
-    fig.patch.set_facecolor('#fdf8f8')
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))          # .../smart-bazar-main/src
+_BASE_DIR = os.path.dirname(_THIS_DIR)                           # .../smart-bazar-main
+_CARPETA_MODELOS = os.path.join(_BASE_DIR, "models")
+
+_RUTA_MODELO_META = os.path.join(_CARPETA_MODELOS, "modelo_metodo_pago.json")
+_RUTA_RESULTADOS = os.path.join(_CARPETA_MODELOS, "resultados_panel4.json")
+
+_COLUMNAS_ESPERADAS = [
+    "Total", "n_items", "n_productos_distintos",
+    "departamento_principal_enc", "pct_fotocopiadora",
+    "dia_semana", "es_fin_de_semana",
+]
+
+_DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Estilo visual — mismas clases CSS que el resto del dashboard (glass)
+# Se duplican aquí como funciones mínimas para que este módulo sea
+# independiente de app.py (evita imports circulares).
+# ─────────────────────────────────────────────────────────────────────
+def _apply_chart_style(fig, ax, title="", xlabel="", ylabel=""):
+    fig.patch.set_facecolor('none')
+    fig.patch.set_alpha(0)
     ax.set_facecolor('#ffffff')
-    ax.tick_params(colors='#1c1b1b')
-    ax.xaxis.label.set_color('#1c1b1b')
-    ax.yaxis.label.set_color('#1c1b1b')
-    if title:
-        ax.set_title(title, color='#000000', fontsize=13, fontweight='bold',
-                     pad=12)
+    ax.tick_params(colors='#1c1b1b', labelsize=8)
+    ax.xaxis.label.set_color('#5D5F5F')
+    ax.yaxis.label.set_color('#5D5F5F')
     for spine in ax.spines.values():
-        spine.set_color('#cfc4c5')
-    ax.grid(True, alpha=0.3, color='#cfc4c5')
-
-
-def _safe_close(fig):
-    """Renderiza la figura en Streamlit y la cierra correctamente."""
+        spine.set_color('#e5e5e5')
+    ax.grid(True, alpha=0.25, color='#e5e5e5', linestyle='--')
+    if title:
+        ax.set_title(title, fontsize=10, fontweight='bold', color='#000000', pad=10)
+    if xlabel:
+        ax.set_xlabel(xlabel, fontsize=8, fontweight='semibold', labelpad=6)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=8, fontweight='semibold', labelpad=6)
     fig.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+
+
+def _kpi(title, value, delta="", alert=False):
+    val_color = "#ef4444" if alert else "#000000"
+    border = "1px solid rgba(239,68,68,0.5)" if alert else "1px solid rgba(255,255,255,0.8)"
+    st.markdown(
+        f'<div class="kpi-card" style="border: {border};">'
+        f'<span class="kpi-title">{title}</span>'
+        f'<span class="kpi-value" style="color: {val_color};">{value}</span>'
+        f'<span class="kpi-delta">{delta}</span></div>',
+        unsafe_allow_html=True
+    )
+
+
+def _insight(title, content, badge="INSIGHT DE NEGOCIO"):
+    st.markdown(
+        f'<div class="insight-card"><span class="insight-badge">{badge}</span>'
+        f'<p class="insight-title">{title}</p>'
+        f'<p class="insight-body">{content}</p></div>',
+        unsafe_allow_html=True
+    )
+
+
+def _ctrl_header(label):
+    st.markdown(f'<div class="ctrl-panel"><p class="ctrl-title">⚙️ {label}</p></div>', unsafe_allow_html=True)
+
+
+def _section_header(title, subtitle):
+    st.markdown(
+        f'<div style="margin-bottom: 1.5rem;">'
+        f'<h1 style="font-size: 1.8rem; font-weight: 800; color: #000000; margin: 0 0 4px 0; letter-spacing: -0.02em;">{title}</h1>'
+        f'<p style="font-size: 0.88rem; color: #5D5F5F; margin: 0;">{subtitle}</p></div>',
+        unsafe_allow_html=True
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Datos mock – métricas de modelos
+# Carga de artefactos — con verificación de integridad y errores claros
 # ─────────────────────────────────────────────────────────────────────
-_MODEL_METRICS = pd.DataFrame(
-    {
-        "Modelo": ["Random Forest", "XGBoost"],
-        "Accuracy": [0.8245, 0.8456],
-        "Precision": [0.7912, 0.8134],
-        "Recall": [0.7654, 0.7891],
-        "F1-Score": [0.7781, 0.8011],
-        "ROC-AUC": [0.8834, 0.9012],
+@st.cache_resource
+def _cargar_modelo():
+    """
+    Carga el modelo ganador (XGBoost o Random Forest) según lo que indique
+    modelo_metodo_pago.json. Para XGBoost usa el formato NATIVO (load_model),
+    nunca pickle, para evitar el error 'input stream corrupted' por
+    incompatibilidad de versiones entre Colab y el entorno local.
+    """
+    if not os.path.exists(_RUTA_MODELO_META):
+        raise FileNotFoundError(f"No existe '{_RUTA_MODELO_META}'.")
+
+    with open(_RUTA_MODELO_META, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+
+    le_depto = LabelEncoder()
+    le_depto.classes_ = np.array(metadata["departamentos_clases"])
+
+    if metadata["tipo_modelo"] == "XGBoost":
+        import xgboost as xgb
+
+        ruta_booster = os.path.join(_CARPETA_MODELOS, metadata["archivo_booster"])
+        if not os.path.exists(ruta_booster):
+            raise FileNotFoundError(f"No existe el booster: '{ruta_booster}'.")
+
+        modelo = xgb.XGBClassifier()
+        modelo.load_model(ruta_booster)  # carga nativa: nunca pasa por pickle
+
+        version_actual = xgb.__version__
+        version_entrenamiento = metadata.get("xgboost_version")
+        if version_actual != version_entrenamiento:
+            st.warning(
+                f"⚠️ El modelo se entrenó con xgboost {version_entrenamiento}, "
+                f"este entorno tiene {version_actual}. El formato nativo debería "
+                f"seguir funcionando; si notas algo raro, iguala versiones con: "
+                f"`pip install xgboost=={version_entrenamiento}`"
+            )
+    else:
+        payload_binario = base64.b64decode(metadata["payload_base64"])
+        checksum_calculado = hashlib.sha256(payload_binario).hexdigest()
+        if checksum_calculado != metadata["checksum_sha256"]:
+            raise ValueError(
+                "El modelo Random Forest llegó corrupto (el checksum no coincide "
+                "con el generado en Colab). Vuelve a descargarlo desde Drive."
+            )
+        modelo = pickle.loads(payload_binario)
+
+    return {
+        "modelo": modelo,
+        "label_encoder_departamento": le_depto,
+        "columnas": metadata["columnas"],
+        "tipo_modelo": metadata["tipo_modelo"],
     }
-)
 
-_CM_RF = np.array([[145, 32],
-                   [28, 87]])
 
-_CM_XGB = np.array([[151, 26],
-                    [25, 90]])
+@st.cache_data
+def _cargar_resultados():
+    """Carga métricas, matrices de confusión e importancias, con verificación de checksum."""
+    if not os.path.exists(_RUTA_RESULTADOS):
+        raise FileNotFoundError(f"No existe '{_RUTA_RESULTADOS}'.")
 
-_CM_LABELS = ["EFECTIVO", "YAPE"]
+    with open(_RUTA_RESULTADOS, "r", encoding="utf-8") as f:
+        contenido = json.load(f)
 
-# Mock SHAP – valores locales por defecto
-_LOCAL_SHAP_DEFAULTS = {
-    "Total": 0.15,
-    "hora_compra": 0.08,
-    "n_items": -0.04,
-    "departamento": 0.12,
-    "pct_foto": -0.09,
-    "dia_semana": 0.03,
-    "es_fds": 0.02,
-    "n_prod_distintos": -0.01,
-}
+    if "checksum_sha256" in contenido:
+        checksum_guardado = contenido["checksum_sha256"]
+        sin_checksum = {k: v for k, v in contenido.items() if k != "checksum_sha256"}
+        checksum_calculado = hashlib.sha256(
+            json.dumps(sin_checksum, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if checksum_calculado != checksum_guardado:
+            st.warning(
+                "⚠️ 'resultados_panel4.json' podría estar corrupto o fue editado "
+                "manualmente (el checksum no coincide). Los números mostrados podrían no ser confiables."
+            )
 
-# Mock SHAP – importancia global (mean |SHAP|)
-_GLOBAL_SHAP = {
-    "Total": 0.182,
-    "hora_compra": 0.145,
-    "pct_fotocopiadora": 0.123,
-    "departamento": 0.098,
-    "n_items": 0.076,
-    "dia_semana": 0.054,
-    "es_fin_de_semana": 0.043,
-    "n_productos_distintos": 0.031,
-}
+    return contenido
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Panel principal
+# Función principal — llamada desde app.py
 # ─────────────────────────────────────────────────────────────────────
-def show_panel():
-    """Panel 4 – Predicción de Pagos (YAPE vs EFECTIVO)."""
-
-    st.header("🔮 Panel 4: Predicción de Pagos")
-    st.markdown(
-        """
-        Este panel predice el **Método de Pago** (YAPE vs EFECTIVO) de una
-        compra basado en el perfil del ticket.  Compara dos modelos
-        (**Random Forest** y **XGBoost**) e implementa la explicabilidad
-        del modelo con **SHAP** (valores pre-calculados).
-        """
+def render():
+    _section_header(
+        "Clasificación Predictiva de Método de Pago",
+        "Evaluación comparativa de Random Forest vs XGBoost y explicabilidad con SHAP."
     )
 
-    # ── Pestañas ────────────────────────────────────────────────────
-    tab1, tab2, tab3 = st.tabs(
-        ["📊 Comparación de Modelos",
-         "🧪 Inferencia en Vivo",
-         "🔍 Explicabilidad (SHAP)"]
-    )
+    try:
+        datos_modelo = _cargar_modelo()
+        resultados = _cargar_resultados()
+    except FileNotFoundError as e:
+        st.error(
+            f"⚠️ Archivo no encontrado: {e}\n\n"
+            f"Verifica que estos 3 archivos estén en `{_CARPETA_MODELOS}`:\n"
+            f"- modelo_metodo_pago.json\n- modelo_metodo_pago_booster.json (si el modelo es XGBoost)\n"
+            f"- resultados_panel4.json"
+        )
+        return
+    except ValueError as e:
+        st.error(f"⚠️ {e}")
+        return
 
-    # ================================================================
-    # TAB 1 – Comparación de Modelos
-    # ================================================================
+    if datos_modelo["columnas"] != _COLUMNAS_ESPERADAS:
+        st.warning(
+            f"⚠️ Las columnas del modelo cargado no coinciden con las esperadas.\n\n"
+            f"Esperadas: {_COLUMNAS_ESPERADAS}\n\nEncontradas: {datos_modelo['columnas']}\n\n"
+            f"El modelo probablemente quedó desactualizado — vuelve a correr el notebook."
+        )
+
+    # ── Selector + KPIs ─────────────────────────────────────────────
+    c0, c1, c2, c3 = st.columns([1.2, 1, 1, 1])
+    with c0:
+        _ctrl_header("Selector de Algoritmo")
+        mod_sel = st.selectbox("Modelo:", ["XGBoost", "Random Forest"])
+
+    metricas_modelo = resultados["metricas"][mod_sel]
+    cm = np.array(resultados["matrices_confusion"][mod_sel])
+
+    with c1: _kpi("F1-Score", f"{metricas_modelo['f1']:.3f}", "class_weight = 'balanced'")
+    with c2: _kpi("Accuracy", f"{metricas_modelo['accuracy']:.1%}", "Tasa de aciertos en test")
+    with c3: _kpi("ROC-AUC", f"{metricas_modelo['roc_auc']:.3f}", "Capacidad de discriminación")
+
+    st.markdown("<div style='height: 1.2rem;'></div>", unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["🧮 Matriz de Confusión", "💡 Importancia SHAP", "🧪 Inferencia en Vivo"])
+
+    # ── Tab 1: Matriz de confusión ───────────────────────────────────
     with tab1:
-        _render_tab_comparacion()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        sns.heatmap(
+            cm, annot=True, fmt="d", cmap="Greys", cbar=False,
+            xticklabels=["Pred: EFECTIVO", "Pred: YAPE"],
+            yticklabels=["Real: EFECTIVO", "Real: YAPE"],
+            annot_kws={"size": 16, "weight": "bold"}, ax=ax, linewidths=2, linecolor='white'
+        )
+        _apply_chart_style(fig, ax, title=f"Matriz de Confusión — {mod_sel}")
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
 
-    # ================================================================
-    # TAB 2 – Inferencia en Vivo
-    # ================================================================
+    # ── Tab 2: Importancia de variables ──────────────────────────────
     with tab2:
-        _render_tab_inferencia()
+        importancias_modelo = resultados["importancias"][mod_sel]
+        items = sorted(importancias_modelo.items(), key=lambda x: x[1])
+        features = [k for k, v in items]
+        importancias = [v for k, v in items]
 
-    # ================================================================
-    # TAB 3 – Explicabilidad (SHAP)
-    # ================================================================
+        fig, ax = plt.subplots(figsize=(10, 3.5))
+        bars = ax.barh(range(len(features)), importancias, color='#0f172a', edgecolor='white', height=0.5)
+        ax.set_yticks(range(len(features)))
+        ax.set_yticklabels(features, fontweight='bold', fontsize=9, color='#000000')
+        for bar, v in zip(bars, importancias):
+            ax.text(bar.get_width() + 0.008, bar.get_y() + bar.get_height() / 2, f'{v:.3f}',
+                     va='center', fontsize=8, fontweight='bold', color='#000000')
+        _apply_chart_style(fig, ax, title=f"Importancia Global de Variables — {mod_sel}", xlabel="Impacto en el modelo")
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    # ── Tab 3: Inferencia en vivo (usa SIEMPRE el modelo realmente cargado) ──
     with tab3:
-        _render_tab_explicabilidad()
+        st.markdown("Simula una compra para predecir el método de pago con el modelo real.")
 
-
-# ─────────────────────────────────────────────────────────────────────
-# TAB 1: Comparación de Modelos
-# ─────────────────────────────────────────────────────────────────────
-def _render_tab_comparacion():
-    st.subheader("Métricas de Rendimiento en el Conjunto de Test")
-    st.markdown(
-        "La siguiente tabla muestra las métricas de evaluación de ambos "
-        "modelos sobre el **20 %** de datos reservados para prueba."
-    )
-
-    # Dataframe estilizado – resaltar máximos en verde
-    df_show = _MODEL_METRICS.set_index("Modelo")
-
-    def _highlight_max(s):
-        is_max = s == s.max()
-        return [
-            "background-color: #1b5e20; color: #a5d6a7; font-weight: bold"
-            if v else "" for v in is_max
-        ]
-
-    styled = (
-        df_show.style
-        .format("{:.4f}")
-        .apply(_highlight_max, axis=0)
-    )
-    st.dataframe(styled, use_container_width=True)
-
-    st.success("🏆 El mejor modelo según F1-Score es: **XGBoost**")
-
-    # ── Matrices de confusión ───────────────────────────────────────
-    st.subheader("Matrices de Confusión")
-    col_rf, col_xgb = st.columns(2)
-
-    with col_rf:
-        st.markdown("**Random Forest**")
-        fig_rf, ax_rf = plt.subplots(figsize=(4.5, 3.8))
-        sns.heatmap(
-            _CM_RF, annot=True, fmt="d", cmap="Blues",
-            xticklabels=_CM_LABELS, yticklabels=_CM_LABELS,
-            linewidths=0.8, linecolor='#333333',
-            cbar_kws={"shrink": 0.75}, ax=ax_rf,
-        )
-        ax_rf.set_xlabel("Predicho", color='#e5e2e1')
-        ax_rf.set_ylabel("Real", color='#e5e2e1')
-        _apply_dark_style(fig_rf, ax_rf, title="Matriz de Confusión — RF")
-        ax_rf.tick_params(colors='#c4c7c8')
-        _safe_close(fig_rf)
-
-    with col_xgb:
-        st.markdown("**XGBoost**")
-        fig_xgb, ax_xgb = plt.subplots(figsize=(4.5, 3.8))
-        sns.heatmap(
-            _CM_XGB, annot=True, fmt="d", cmap="Oranges",
-            xticklabels=_CM_LABELS, yticklabels=_CM_LABELS,
-            linewidths=0.8, linecolor='#333333',
-            cbar_kws={"shrink": 0.75}, ax=ax_xgb,
-        )
-        ax_xgb.set_xlabel("Predicho", color='#e5e2e1')
-        ax_xgb.set_ylabel("Real", color='#e5e2e1')
-        _apply_dark_style(fig_xgb, ax_xgb, title="Matriz de Confusión — XGB")
-        ax_xgb.tick_params(colors='#c4c7c8')
-        _safe_close(fig_xgb)
-
-    st.markdown(
-        """
-        > **Interpretación del Error:** Un falso positivo (predecir YAPE
-        > cuando paga en Efectivo) reduce el sencillo físico sin alerta
-        > previa.  Maximizar la **precisión de YAPE** es fundamental.
-        """
-    )
-
-
-# ─────────────────────────────────────────────────────────────────────
-# TAB 2: Inferencia en Vivo
-# ─────────────────────────────────────────────────────────────────────
-def _render_tab_inferencia():
-    st.subheader("Simulación de Compra (Predicción en Vivo)")
-    st.markdown(
-        "Modifique los valores para predecir si este cliente pagará "
-        "con **YAPE** o **EFECTIVO**."
-    )
-
-    # ── Formulario ──────────────────────────────────────────────────
-    with st.form("form_inferencia"):
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            total = st.number_input(
-                "Total (S/)", min_value=0.1, max_value=500.0,
-                value=15.0, step=0.5,
-            )
-            hora = st.slider("Hora de Compra", 8, 22, 12)
-            n_items = st.number_input(
-                "Nº Items", min_value=1, max_value=100, value=2, step=1,
-            )
-            n_prod = st.number_input(
-                "Nº Productos Distintos", min_value=1, max_value=50,
-                value=1, step=1,
-            )
-
-        with col_right:
-            departamento = st.selectbox(
-                "Departamento",
-                ["UTILES", "FOTOCOPIADORA", "GOLOSINAS",
-                 "BEBIDAS", "SERVICIOS"],
-            )
-            pct_foto = st.slider(
-                "% Fotocopiadora", 0.0, 1.0, 0.0, step=0.05,
-            )
-            dia_semana = st.selectbox(
-                "Día de la Semana",
-                ["Lunes", "Martes", "Miércoles", "Jueves",
-                 "Viernes", "Sábado", "Domingo"],
-            )
-
-        submitted = st.form_submit_button("🚀 Predecir Método de Pago")
-
-    # ── Lógica determinista mock ────────────────────────────────────
-    if submitted:
-        if departamento == "FOTOCOPIADORA" or total < 8:
-            pred_label = "EFECTIVO"
-            prob = 0.72
-        elif total > 30 or hora >= 18:
-            pred_label = "YAPE"
-            prob = 0.81
-        else:
-            pred_label = "YAPE"
-            prob = 0.63
-
-        st.markdown("### Resultado de la Predicción")
-        if pred_label == "YAPE":
-            st.success(
-                f"📱 **Método Predicho: YAPE** — "
-                f"Probabilidad: {prob:.0%}"
-            )
-        else:
+        if datos_modelo["tipo_modelo"] != mod_sel:
             st.info(
-                f"💵 **Método Predicho: EFECTIVO** — "
-                f"Probabilidad: {prob:.0%}"
+                f"ℹ️ El modelo cargado en memoria es **{datos_modelo['tipo_modelo']}** "
+                f"(el que se guardó como ganador). La inferencia en vivo usa ese modelo, "
+                f"independientemente de cuál elijas arriba para ver métricas/gráficos."
             )
 
-        # ── Gráfico SHAP local (mock) ──────────────────────────────
-        st.markdown("---")
-        st.subheader("🔍 Explicabilidad Local — ¿Por qué esta predicción?")
+        modelo = datos_modelo["modelo"]
+        le_depto = datos_modelo["label_encoder_departamento"]
+        columnas = datos_modelo["columnas"]
 
-        shap_vals = dict(_LOCAL_SHAP_DEFAULTS)  # copia
+        colf1, colf2 = st.columns(2)
+        with colf1:
+            total_inf = st.number_input("Total (S/)", min_value=0.1, max_value=250.0, value=15.0, step=0.5)
+            n_items_inf = st.number_input("Nº Items", min_value=1, max_value=100, value=2, step=1)
+            n_prod_inf = st.number_input("Nº Productos Distintos", min_value=1, max_value=50, value=1, step=1)
+        with colf2:
+            depto_inf = st.selectbox("Departamento", resultados["departamentos_validos"])
+            pct_foto_inf = 1.0 if depto_inf == "FOTOCOPIADORA" else 0.0
+            dia_inf = st.selectbox("Día de la Semana", _DIAS_SEMANA)
 
-        # Pequeñas perturbaciones deterministas según inputs
-        if total > 30:
-            shap_vals["Total"] = 0.24
-        if departamento == "FOTOCOPIADORA":
-            shap_vals["departamento"] = -0.18
-            shap_vals["pct_foto"] = 0.16
-        if hora >= 18:
-            shap_vals["hora_compra"] = 0.14
+        if st.button("🚀 Predecir Método de Pago"):
+            dia_idx = _DIAS_SEMANA.index(dia_inf)
+            fila = pd.DataFrame([{
+                "Total": total_inf,
+                "n_items": n_items_inf,
+                "n_productos_distintos": n_prod_inf,
+                "departamento_principal_enc": le_depto.transform([depto_inf])[0],
+                "pct_fotocopiadora": pct_foto_inf,
+                "dia_semana": dia_idx,
+                "es_fin_de_semana": int(dia_idx in [5, 6]),
+            }])[columnas]
 
-        df_shap = (
-            pd.DataFrame(
-                list(shap_vals.items()),
-                columns=["Característica", "SHAP"],
-            )
-            .sort_values("SHAP", key=abs, ascending=True)
+            pred = modelo.predict(fila)[0]
+            prob = modelo.predict_proba(fila)[0, 1]
+            if pred == 1:
+                st.success(f"📱 Método Predicho: **YAPE** — Probabilidad: {prob:.0%}")
+            else:
+                st.info(f"💵 Método Predicho: **EFECTIVO** — Probabilidad de YAPE: {prob:.0%}")
+
+    # ── Insights ──────────────────────────────────────────────────
+    st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
+    ic1, ic2 = st.columns(2)
+    with ic1:
+        _insight(
+            "Preferencia por F1-Score",
+            "El desbalance Efectivo (66.3%) vs Yape (33.7%) invalida la Accuracy como métrica "
+            "principal. El F1-Score pondera Precision y Recall equitativamente.",
+            badge="JUSTIFICACIÓN TÉCNICA"
         )
-
-        colors = [
-            "#ff0d57" if v > 0 else "#1e88e5"
-            for v in df_shap["SHAP"]
-        ]
-
-        fig, ax = plt.subplots(figsize=(8, 4.2))
-        ax.barh(
-            df_shap["Característica"], df_shap["SHAP"],
-            color=colors, edgecolor='none', height=0.6,
+    with ic2:
+        _insight(
+            "Lectura honesta del desempeño",
+            f"El modelo {resultados['modelo_recomendado']} es el recomendado (mejor F1), pero el "
+            f"desempeño es moderado: monto, producto y día se relacionan con el pago de forma "
+            f"real pero no muy fuerte.",
+            badge="SHAP INSIGHT"
         )
-        ax.axvline(0, color='#888888', linewidth=0.8)
-        ax.set_xlabel("Contribución SHAP")
-        _apply_dark_style(
-            fig, ax,
-            title="Explicación Local (SHAP)\n"
-                  "Rojo → YAPE  ·  Azul → EFECTIVO",
-        )
-        _safe_close(fig)
-
-        st.markdown(
-            """
-            - 🔴 **Rojo (positivo):** empuja la predicción hacia **YAPE**.
-            - 🔵 **Azul (negativo):** empuja la predicción hacia **EFECTIVO**.
-            """
-        )
-
-
-# ─────────────────────────────────────────────────────────────────────
-# TAB 3: Explicabilidad (SHAP)
-# ─────────────────────────────────────────────────────────────────────
-def _render_tab_explicabilidad():
-    st.subheader("Importancia Global de Variables (SHAP)")
-    st.markdown(
-        """
-        El siguiente gráfico muestra el **impacto promedio global**
-        (mean |SHAP value|) de cada variable en el modelo XGBoost
-        seleccionado.  Ayuda a entender qué factores determinan el
-        método de pago a nivel general del negocio.
-        """
-    )
-
-    # ── 1. Barras de importancia global ─────────────────────────────
-    df_global = (
-        pd.DataFrame(
-            list(_GLOBAL_SHAP.items()),
-            columns=["Característica", "mean_|SHAP|"],
-        )
-        .sort_values("mean_|SHAP|", ascending=True)
-    )
-
-    n = len(df_global)
-    # Gradiente de colores: de plata (baja) a esmeralda (alta)
-    palette = [
-        plt.cm.GnBu(0.25 + 0.65 * i / (n - 1)) for i in range(n)
-    ]
-
-    fig_g, ax_g = plt.subplots(figsize=(9, 5))
-    ax_g.barh(
-        df_global["Característica"],
-        df_global["mean_|SHAP|"],
-        color=palette, edgecolor='none', height=0.6,
-    )
-    ax_g.set_xlabel("mean |SHAP value|")
-    _apply_dark_style(
-        fig_g, ax_g,
-        title="Importancia Global de Variables — XGBoost",
-    )
-    _safe_close(fig_g)
-
-    # ── 2. Beeswarm simulado (scatter con jitter) ──────────────────
-    st.subheader("Distribución Detallada (Beeswarm Simulado)")
-    st.markdown(
-        "Cada punto representa una observación.  El color indica el "
-        "**valor de la variable** (alto → rojo, bajo → azul).  La "
-        "posición horizontal es el impacto SHAP."
-    )
-
-    features = list(reversed(df_global["Característica"].tolist()))
-    rng = np.random.default_rng(42)
-    n_points = 120  # puntos por feature
-
-    fig_b, ax_b = plt.subplots(figsize=(9, 5.5))
-
-    for idx, feat in enumerate(features):
-        base_importance = _GLOBAL_SHAP[feat]
-        # Valores SHAP simulados centrados en 0, dispersión proporcional
-        shap_vals = rng.normal(0, base_importance * 1.8, n_points)
-        # Valor de la variable simulado (0-1) correlacionado con SHAP
-        feat_vals = np.clip(
-            0.5 + shap_vals / (2 * base_importance + 1e-6)
-            + rng.normal(0, 0.15, n_points),
-            0, 1,
-        )
-        # Jitter vertical
-        y_jitter = idx + rng.uniform(-0.3, 0.3, n_points)
-
-        sc = ax_b.scatter(
-            shap_vals, y_jitter,
-            c=feat_vals, cmap="coolwarm", s=12, alpha=0.65,
-            edgecolors='none', vmin=0, vmax=1,
-        )
-
-    ax_b.set_yticks(range(len(features)))
-    ax_b.set_yticklabels(features)
-    ax_b.axvline(0, color='#888888', linewidth=0.8)
-    ax_b.set_xlabel("Valor SHAP (impacto en la predicción)")
-
-    # Barra de color
-    cbar = fig_b.colorbar(sc, ax=ax_b, pad=0.02, aspect=30)
-    cbar.set_label("Valor de la variable", color='#c4c7c8')
-    cbar.ax.yaxis.set_tick_params(color='#c4c7c8')
-    plt.setp(cbar.ax.yaxis.get_ticklabels(), color='#c4c7c8')
-    cbar.outline.set_edgecolor('#444748')
-
-    _apply_dark_style(
-        fig_b, ax_b,
-        title="Beeswarm Plot (simulado) — XGBoost",
-    )
-    _safe_close(fig_b)
-
-    st.markdown(
-        """
-        > **Lectura del gráfico:** Si los puntos rojos (valor alto de la
-        > variable) se concentran a la **derecha**, esa variable alta
-        > empuja hacia YAPE.  Si se concentran a la **izquierda**, empuja
-        > hacia EFECTIVO.
-        """
-    )
-
-
-# Alias explícito de importación
-show_predictivo_panel = show_panel
-__all__ = ["show_panel", "show_predictivo_panel"]
-

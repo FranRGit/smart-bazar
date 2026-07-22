@@ -1,0 +1,77 @@
+{
+  "metricas": {
+    "Random Forest": {
+      "accuracy": 0.6117021276595744,
+      "precision": 0.39655172413793105,
+      "recall": 0.3770491803278688,
+      "f1": 0.3865546218487395,
+      "roc_auc": 0.5818381308893765
+    },
+    "XGBoost": {
+      "accuracy": 0.5851063829787234,
+      "precision": 0.37681159420289856,
+      "recall": 0.4262295081967213,
+      "f1": 0.4,
+      "roc_auc": 0.5545372402220214
+    }
+  },
+  "matrices_confusion": {
+    "Random Forest": [
+      [
+        92,
+        35
+      ],
+      [
+        38,
+        23
+      ]
+    ],
+    "XGBoost": [
+      [
+        84,
+        43
+      ],
+      [
+        35,
+        26
+      ]
+    ]
+  },
+  "importancias": {
+    "Random Forest": {
+      "Total": 0.4385788551898956,
+      "n_items": 0.2611455122213208,
+      "n_productos_distintos": 0.06377445794655776,
+      "departamento_principal_enc": 0.02000346877417,
+      "pct_fotocopiadora": 0.025793967016625858,
+      "dia_semana": 0.15351875066951906,
+      "es_fin_de_semana": 0.03718498818191088
+    },
+    "XGBoost": {
+      "Total": 0.22101345658302307,
+      "n_items": 0.20056560635566711,
+      "n_productos_distintos": 0.11676416546106339,
+      "departamento_principal_enc": 0.18512456119060516,
+      "pct_fotocopiadora": 0.11522053927183151,
+      "dia_semana": 0.16131173074245453,
+      "es_fin_de_semana": 0.0
+    }
+  },
+  "modelo_recomendado": "XGBoost",
+  "departamentos_validos": [
+    "FOTOCOPIADORA",
+    "UTILES"
+  ],
+  "columnas_modelo": [
+    "Total",
+    "n_items",
+    "n_productos_distintos",
+    "departamento_principal_enc",
+    "pct_fotocopiadora",
+    "dia_semana",
+    "es_fin_de_semana"
+  ],
+  "xgboost_version": "3.3.0",
+  "sklearn_version": "1.6.1",
+  "checksum_sha256": "7e20e2757b3d4d50f572595322d0025ad9099e22455b7014f827ab366e11f361"
+}
