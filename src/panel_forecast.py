@@ -87,8 +87,8 @@ def _inject_styles() -> None:
         }
 
         .panel-card {
-            padding: 1rem 1.1rem;
-            margin-bottom: 1rem;
+            padding: 1.2rem 1.4rem;
+            margin-bottom: 1.2rem;
         }
 
         .metric-grid {
@@ -186,8 +186,9 @@ def _inject_styles() -> None:
             background: rgba(255,255,255,0.92);
             border: 1px solid rgba(15, 23, 42, 0.08);
             border-radius: 18px;
-            padding: 1rem 1.1rem 0.7rem 1.1rem;
+            padding: 1.2rem 1.4rem;
             box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+            margin-bottom: 1.2rem;
         }
 
         .section-title {
@@ -699,8 +700,6 @@ def show_panel():
         st.pyplot(fig_main, use_container_width=True)
         plt.close(fig_main)
         st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
         # Predicciones futuras
         st.markdown(
