@@ -106,7 +106,7 @@ def _section_header(title, subtitle):
 # Carga de artefactos — con verificación de integridad y errores claros
 # ─────────────────────────────────────────────────────────────────────
 @st.cache_resource
-def _cargar_modelo():
+def cargar_modelo():
     """
     Carga el modelo ganador (XGBoost o Random Forest) según lo que indique
     modelo_metodo_pago.json. Para XGBoost usa el formato NATIVO (load_model),
@@ -247,7 +247,7 @@ def render():
     )
 
     try:
-        datos_modelo = _cargar_modelo()
+        datos_modelo = cargar_modelo()
         resultados = _cargar_resultados()
     except FileNotFoundError as e:
         st.error(

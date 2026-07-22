@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import sqlite3
 from datetime import datetime
+from src.panel_predictivo import cargar_modelo
 
 
 # ── Database helpers ──────────────────────────────────────────────────────────
@@ -64,6 +65,50 @@ def mock_predict_payment(total, hora, departamento):
         return 'YAPE', 0.68
 
 
+def predict_payment_real(datos_modelo, total, hora, departamento):
+    """Predicción en tiempo real usando el modelo XGBoost/RF real."""
+    if datos_modelo is None:
+        # Fallback en caso de que no cargue el modelo
+        return "EFECTIVO", 0.50
+        
+    modelo = datos_modelo["modelo"]
+    le_depto = datos_modelo["label_encoder_departamento"]
+    columnas = datos_modelo["columnas"]
+    
+    # 1. Preprocesar las variables de entrada del POS
+    # Obtener el día actual (para simular el día de la semana)
+    dia_idx = datetime.now().weekday() # 0 = Lunes, 6 = Domingo
+    
+    # Codificar departamento
+    try:
+        depto_enc = le_depto.transform([departamento])[0]
+    except Exception:
+        depto_enc = 0 # Fallback
+        
+    pct_foto = 1.0 if departamento == "FOTOCOPIADORA" else 0.0
+    
+    # 2. Crear fila estructurada exactamente como la espera el modelo
+    fila = pd.DataFrame([{
+        "Total": total,
+        "n_items": 2, # Valor promedio aproximado para POS
+        "n_productos_distintos": 1, 
+        "departamento_principal_enc": depto_enc,
+        "pct_fotocopiadora": pct_foto,
+        "dia_semana": dia_idx,
+        "es_fin_de_semana": int(dia_idx in [5, 6]),
+    }])[columnas]
+    
+    # 3. Realizar inferencia real
+    pred = modelo.predict(fila)[0]
+    prob = modelo.predict_proba(fila)[0, 1]
+    
+    metodo = "YAPE" if pred == 1 else "EFECTIVO"
+    # La confianza es la probabilidad asociada a la clase ganadora
+    confianza = prob if pred == 1 else (1 - prob)
+    
+    return metodo, confianza
+
+
 def mock_recommend_combo(departamento, total):
     """Recomendación de combo basada en catálogo de reglas de asociación Apriori."""
     combos = {
@@ -93,6 +138,13 @@ PRODUCT_CATALOG = {
 
 def show_panel():
     init_db()
+
+    # Cargar modelo de clasificación real para predicción de pago
+    try:
+        datos_modelo = cargar_modelo()
+    except Exception as e:
+        st.warning(f"No se pudo cargar el modelo real ({e}). Usando simulador de contingencia.")
+        datos_modelo = None
 
     # ── Pestañas (Stitch Tabs) ──────────────────────────────────────────────
     tab_pos, tab_crud = st.tabs(
@@ -180,8 +232,8 @@ def show_panel():
                     value=hora_now if 8 <= hora_now <= 22 else 14,
                 )
 
-            # Predicciones inteligentes deterministas en tiempo real
-            pred_pago, pred_conf = mock_predict_payment(total_input, hora_input, depto_input)
+            # Predicciones inteligentes reales en tiempo real
+            pred_pago, pred_conf = predict_payment_real(datos_modelo, total_input, hora_input, depto_input)
             sugerencia_combo = mock_recommend_combo(depto_input, total_input)
 
             # Recent Scans & Quick Actions (Grid 2 cols)
