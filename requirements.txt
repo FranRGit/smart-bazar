@@ -4,5 +4,8 @@ numpy
 matplotlib
 seaborn
 plotly
+networkx
+mlxtend
+nbformat
 scikit-learn
 shap

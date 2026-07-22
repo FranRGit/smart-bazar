@@ -5,9 +5,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
+import networkx as nx
 from datetime import datetime
-import pickle
-from src import panel_predictivo
+from src.category_rules import (
+    PENDING_CATEGORY,
+    mine_category_rules,
+    prepare_category_data,
+)
+from src.data_loader import load_detalle_ventas, load_inventario
 
 st.set_page_config(
     page_title="SmartBazar — Dashboard Data Mining",
@@ -332,6 +337,71 @@ def ctrl_header(label):
     st.markdown(f'<div class="ctrl-panel"><p class="ctrl-title">⚙️ {label}</p></div>', unsafe_allow_html=True)
 
 
+@st.cache_data(show_spinner="Preparando categorías y reglas reales...")
+def load_association_data():
+    """Carga los CSV limpios y conserva la trazabilidad de la categoría analítica."""
+    return prepare_category_data(load_detalle_ventas(), load_inventario())
+
+
+def render_association_panel():
+    section_header("Descubrimiento de Patrones (Apriori)", "Reglas reales por categoría analítica, con auditoría y trazabilidad del catálogo.")
+    ventas_cat, auditoria = load_association_data()
+    c1, c2, c3, c4 = st.columns([1.25, 1, 1, 1])
+    with c1:
+        ctrl_header("Umbrales de Búsqueda")
+        min_supp = st.slider("Soporte Mínimo", 0.005, 0.10, 0.005, 0.005, key="asoc_support")
+        min_conf = st.slider("Confianza Mínima", 0.05, 1.00, 0.40, 0.05, key="asoc_confidence")
+        min_lift = st.slider("Lift Mínimo", 1.0, 10.0, 1.0, 0.1, key="asoc_lift")
+
+    reglas = mine_category_rules(ventas_cat, min_supp)
+    reglas_filt = reglas[(reglas["Confianza"] >= min_conf) & (reglas["Lift"] >= min_lift)].copy()
+    top_lift = reglas_filt.iloc[0] if not reglas_filt.empty else None
+    top_conf = reglas_filt.sort_values("Confianza", ascending=False).iloc[0] if not reglas_filt.empty else None
+    pendientes = int((ventas_cat["Categoria_Analitica"] == PENDING_CATEGORY).sum())
+    with c2: kpi("Reglas Activas", str(len(reglas_filt)), f"Lift ≥ {min_lift:.1f}")
+    with c3: kpi("Mayor Lift", f"{top_lift['Lift']:.2f}" if top_lift is not None else "—", top_lift["Antecedente"][:22] if top_lift is not None else "Sin reglas")
+    with c4: kpi("Cobertura", f"{1 - pendientes / len(ventas_cat):.1%}", f"{pendientes} líneas pendientes", alert=pendientes > 0)
+
+    tab1, tab2, tab3, tab4 = st.tabs(["Dispersión", "Grafo de Red", "Tabla de Reglas", "Auditoría de Categorías"])
+    with tab1:
+        fig, ax = plt.subplots(figsize=(10, 4.2))
+        if not reglas_filt.empty:
+            sc = ax.scatter(reglas_filt["Soporte"], reglas_filt["Confianza"], c=reglas_filt["Lift"], cmap="Greys", s=reglas_filt["Lift"] * 70, alpha=0.85, edgecolors="black", linewidth=1)
+            plt.colorbar(sc, ax=ax, shrink=0.8, label="Lift")
+            for _, rule in reglas_filt.head(6).iterrows():
+                ax.annotate(f"{rule['Antecedente'][:12]} → {rule['Consecuente'][:12]}", (rule["Soporte"], rule["Confianza"]), fontsize=7, xytext=(4, 4), textcoords="offset points")
+        apply_chart_style(fig, ax, title="Reglas reales: confianza vs soporte", xlabel="Soporte", ylabel="Confianza")
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+    with tab2:
+        if reglas_filt.empty:
+            st.info("No hay reglas que cumplan los umbrales seleccionados.")
+        else:
+            graph = nx.DiGraph()
+            for _, rule in reglas_filt.head(15).iterrows():
+                graph.add_edge(rule["Antecedente"], rule["Consecuente"], weight=rule["Lift"])
+            fig, ax = plt.subplots(figsize=(10, 4.5))
+            position = nx.spring_layout(graph, seed=42)
+            nx.draw_networkx_nodes(graph, position, node_color="#0f172a", node_size=1050, ax=ax)
+            nx.draw_networkx_labels(graph, position, font_size=7, font_color="white", ax=ax)
+            nx.draw_networkx_edges(graph, position, width=[graph[a][b]["weight"] for a, b in graph.edges], edge_color="#64748b", arrows=True, arrowsize=14, ax=ax)
+            ax.axis("off")
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+    with tab3:
+        if reglas_filt.empty:
+            st.info("No hay reglas que cumplan los umbrales seleccionados. Ajusta los controles.")
+        else:
+            st.dataframe(reglas_filt.style.format({"Soporte": "{:.2%}", "Confianza": "{:.2%}", "Lift": "{:.2f}"}), use_container_width=True, hide_index=True)
+    with tab4:
+        st.caption("La categoría derivada por descripción tiene prioridad; la categoría de inventario normalizada se usa como respaldo.")
+        st.dataframe(auditoria.sort_values(["Accion", "Productos"], ascending=[True, False]), use_container_width=True, hide_index=True)
+        pendientes_df = ventas_cat.loc[ventas_cat["Categoria_Analitica"] == PENDING_CATEGORY, ["ID_Producto", "Descripcion", "Categoria"]].drop_duplicates()
+        if not pendientes_df.empty:
+            st.warning("Productos que requieren revisión manual")
+            st.dataframe(pendientes_df, use_container_width=True, hide_index=True)
+
+
 # ═══════════════════════════════════════════════════════════════
 #  4. SIDEBAR REFACTORIZADO (FIEL A IMAGEN DE REFERENCIA 2)
 # ═══════════════════════════════════════════════════════════════
@@ -370,84 +440,7 @@ if opcion_sel == "EDA":
 elif opcion_sel == "Clustering":
     show_clustering()
 elif opcion_sel == "Reglas de Asociación":
-    section_header("Descubrimiento de Patrones (Apriori)", "Análisis de cesta de compra y afinidad de productos para combos en punto de venta.")
-
-    reglas_raw = [
-        {"A": "FOTOCOPIA A4", "C": "MICA A4 VINIFAN", "sop": 0.045, "cnf": 0.72, "lft": 3.21},
-        {"A": "CUADERNO A4", "C": "LAPICERO PILOT", "sop": 0.038, "cnf": 0.65, "lft": 2.89},
-        {"A": "FOLDER MANILA", "C": "FASTER CLIPS", "sop": 0.032, "cnf": 0.58, "lft": 2.54},
-        {"A": "IMPRESION B/N", "C": "ANILLADO SIMPLE", "sop": 0.028, "cnf": 0.52, "lft": 2.31},
-        {"A": "LAPICERO FABER", "C": "BORRADOR BLANCO", "sop": 0.025, "cnf": 0.48, "lft": 2.15},
-        {"A": "PAPEL BOND A4", "C": "SOBRE MANILA A4", "sop": 0.022, "cnf": 0.44, "lft": 1.98},
-        {"A": "CUADERNO A5", "C": "CORRECTOR L.P.", "sop": 0.019, "cnf": 0.41, "lft": 1.82},
-        {"A": "PLUMONES FABER", "C": "CARTULINA A4", "sop": 0.016, "cnf": 0.38, "lft": 1.65},
-    ]
-
-    # ── Controles + KPIs en fila ──
-    c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
-    with c1:
-        ctrl_header("Umbrales de Búsqueda")
-        min_supp = st.slider("Soporte Mín:", 0.01, 0.10, 0.02, 0.005)
-        min_conf = st.slider("Confianza Mín:", 0.20, 0.80, 0.40, 0.05)
-        min_lift = st.slider("Lift Mínimo:", 1.0, 4.0, 1.5, 0.1)
-
-    reglas_filt = [r for r in reglas_raw if r["sop"] >= min_supp and r["cnf"] >= min_conf and r["lft"] >= min_lift]
-    top_lift = max(reglas_filt, key=lambda x: x["lft"]) if reglas_filt else {"A": "-", "C": "-", "lft": 0}
-    top_conf = max(reglas_filt, key=lambda x: x["cnf"]) if reglas_filt else {"A": "-", "C": "-", "cnf": 0}
-
-    with c2: kpi("Reglas Activas", f"{len(reglas_filt)}", f"Lift ≥ {min_lift}")
-    with c3: kpi("Mayor Lift", f"{top_lift['lft']:.2f}", f"{top_lift['A'][:10]} → {top_lift['C'][:10]}")
-    with c4: kpi("Mayor Confianza", f"{top_conf['cnf']:.0%}" if reglas_filt else "—", f"{top_conf['A'][:10]} → {top_conf['C'][:10]}" if reglas_filt else "—")
-
-    st.markdown("<div style='height: 1.2rem;'></div>", unsafe_allow_html=True)
-
-    tab1, tab2, tab3 = st.tabs(["🌌 Dispersión (Confianza vs Soporte)", "🕸️ Grafo de Red", "📋 Tabla de Reglas"])
-
-    with tab1:
-        fig, ax = plt.subplots(figsize=(10, 4.2))
-        if reglas_filt:
-            sops = [r["sop"] for r in reglas_filt]
-            cnfs = [r["cnf"] for r in reglas_filt]
-            lfts = [r["lft"] for r in reglas_filt]
-            sc = ax.scatter(sops, cnfs, c=lfts, cmap="Greys", s=[l*70 for l in lfts], alpha=0.85, edgecolors='black', linewidth=1.2)
-            cbar = plt.colorbar(sc, ax=ax, shrink=0.8)
-            cbar.set_label("Lift", fontsize=8)
-            for r in reglas_filt[:5]:
-                ax.annotate(f"{r['A'][:8]}→{r['C'][:8]}", (r["sop"], r["cnf"]), fontsize=7, xytext=(5,5), textcoords='offset points', color='#000000')
-        apply_chart_style(fig, ax, title="Dispersión de Reglas (Tamaño y Color = Lift)", xlabel="Soporte", ylabel="Confianza")
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with tab2:
-        fig, ax = plt.subplots(figsize=(10, 4.2))
-        ax.axis('off')
-        pos_nodos = {
-            "FOTOCOPIA A4": (0.15, 0.8), "MICA VINIFAN": (0.4, 0.85),
-            "CUADERNO A4": (0.15, 0.45), "LAPICERO PILOT": (0.45, 0.48),
-            "FOLDER MANILA": (0.2, 0.12), "FASTER CLIPS": (0.5, 0.15),
-            "PAPEL BOND": (0.7, 0.7), "SOBRE MANILA": (0.88, 0.5)
-        }
-        aristas = [("FOTOCOPIA A4", "MICA VINIFAN", 3.2), ("CUADERNO A4", "LAPICERO PILOT", 2.9), ("FOLDER MANILA", "FASTER CLIPS", 2.5), ("PAPEL BOND", "SOBRE MANILA", 2.0)]
-        for n1, n2, peso in aristas:
-            x1, y1 = pos_nodos[n1]; x2, y2 = pos_nodos[n2]
-            ax.annotate("", xy=(x2, y2), xytext=(x1, y1), arrowprops=dict(arrowstyle="->", lw=peso*0.7, color="#475569", shrinkA=18, shrinkB=18))
-            ax.text((x1+x2)/2, (y1+y2)/2 + 0.04, f"Lift {peso}", ha='center', fontsize=7.5, fontweight='bold', color='#000000', bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='#cbd5e1', alpha=0.9))
-        for nombre, (x, y) in pos_nodos.items():
-            ax.scatter(x, y, s=650, color='#0f172a', zorder=4, edgecolors='white', linewidth=2)
-            ax.text(x, y-0.09, nombre, ha='center', fontsize=7.5, fontweight='bold', color='#000000')
-        ax.set_title("Red Interconectada de Artículos (Afinidad de Compra)", fontsize=10, fontweight='bold', color='#000000', pad=10)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with tab3:
-        if reglas_filt:
-            df_display = pd.DataFrame(reglas_filt).rename(columns={"A": "Antecedente", "C": "Consecuente", "sop": "Soporte", "cnf": "Confianza", "lft": "Lift"})
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
-        else:
-            st.info("No hay reglas que cumplan los umbrales seleccionados. Ajuste los sliders.")
-
-    st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
-    insight("Estrategia de Ventas Cruzadas", "Estos indicadores sustentan la creación de 'Combos Escolares y de Oficina' en mostrador para rotar stock inmovilizado y elevar el ticket promedio por visita.", badge="ACCIÓN COMERCIAL")
+    render_association_panel()
 
 
 # ═══════════════════════════════════════════════════════════════
