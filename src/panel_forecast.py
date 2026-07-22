@@ -18,6 +18,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -663,43 +664,100 @@ def show_panel():
         st.markdown(
             "<div class='chart-shell'>"
             "<div class='section-title'>Evolucion de Ventas Semanales</div>"
-            "<div class='section-caption'>Historial real, pronostico Prophet, intervalo de confianza y media movil exportada.</div>",
+            "<div class='section-caption'>Historial real, pronostico Prophet, intervalo de confianza y media movil. Mueve el cursor para ver detalles.</div>",
             unsafe_allow_html=True,
         )
         
-        fig_main, ax_main = plt.subplots(figsize=(11.6, 4.2))
-        _apply_chart_style(fig_main, ax_main)
-        ax_main.plot(weekly_df["ds"], weekly_df["y"], color="#000000", linewidth=2.0, label="Ventas Reales")
-        ax_main.plot(forecast_hist["ds"], forecast_hist["yhat_original"], color="#737373", linewidth=1.8, linestyle=":", label="Prophet Ajuste")
+        fig_main = go.Figure()
+        
+        # 1. Ventas Reales
+        fig_main.add_trace(go.Scatter(
+            x=weekly_df["ds"],
+            y=weekly_df["y"],
+            mode="lines+markers",
+            name="Ventas Reales",
+            line=dict(color="#000000", width=2.2),
+            marker=dict(size=4, color="#000000"),
+            hovertemplate="Ventas Reales: S/ %{y:,.2f}<extra></extra>"
+        ))
+        
+        # 2. Prophet Ajuste
+        fig_main.add_trace(go.Scatter(
+            x=forecast_hist["ds"],
+            y=forecast_hist["yhat_original"],
+            mode="lines",
+            name="Prophet Ajuste",
+            line=dict(color="#737373", width=1.8, dash="dot"),
+            hovertemplate="Prophet Ajuste: S/ %{y:,.2f}<extra></extra>"
+        ))
+        
+        # 3. Prophet Futuro
         prophet_future_plot = forecast_future[forecast_future["ds"] >= weekly_df["ds"].max()]
-        ax_main.plot(prophet_future_plot["ds"], prophet_future_plot["yhat_original"], color="#1f2937", linewidth=2.0, linestyle="--", label="Prophet Futuro")
-        ax_main.fill_between(
-            forecast_future["ds"],
-            forecast_future["yhat_lower_original"],
-            forecast_future["yhat_upper_original"],
-            color="#000000",
-            alpha=0.08,
-            label="Intervalo de Confianza",
+        fig_main.add_trace(go.Scatter(
+            x=prophet_future_plot["ds"],
+            y=prophet_future_plot["yhat_original"],
+            mode="lines+markers",
+            name="Prophet Futuro",
+            line=dict(color="#1f2937", width=2.2, dash="dash"),
+            marker=dict(size=5, color="#1f2937"),
+            hovertemplate="Prophet Futuro: S/ %{y:,.2f}<extra></extra>"
+        ))
+        
+        # 4. Intervalo de Confianza (fill)
+        fig_main.add_trace(go.Scatter(
+            x=forecast_future["ds"],
+            y=forecast_future["yhat_upper_original"],
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip"
+        ))
+        fig_main.add_trace(go.Scatter(
+            x=forecast_future["ds"],
+            y=forecast_future["yhat_lower_original"],
+            mode="lines",
+            fill="tonexty",
+            fillcolor="rgba(15, 23, 42, 0.08)",
+            line=dict(width=0),
+            name="Intervalo de Confianza",
+            hoverinfo="skip"
+        ))
+        
+        # 5. Media Móvil
+        fig_main.add_trace(go.Scatter(
+            x=ma_history["ds"],
+            y=ma_history["ma_pred"],
+            mode="lines",
+            name="Media Movil",
+            line=dict(color="#a3a3a3", width=1.5),
+            hovertemplate="Media Movil: S/ %{y:,.2f}<extra></extra>"
+        ))
+        
+        fig_main.update_layout(
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=340,
+            hovermode="x unified",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                font=dict(size=9)
+            ),
+            xaxis=dict(
+                gridcolor="#f1f5f9",
+                tickfont=dict(size=9, color="#64748b")
+            ),
+            yaxis=dict(
+                gridcolor="#f1f5f9",
+                tickfont=dict(size=9, color="#64748b"),
+                tickprefix="S/ "
+            )
         )
-        ax_main.plot(ma_history["ds"], ma_history["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.8, label="Media Movil")
-        ax_main.plot(ma_future["ds"], ma_future["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.4, linestyle="--")
-        ax_main.scatter([next_forecast["ds"]], [next_forecast["yhat_original"]], color="#111827", s=28, zorder=5)
-        ax_main.annotate(
-            f"Hoy S/ {next_forecast['yhat_original']:,.0f}".replace(",", "."),
-            xy=(next_forecast["ds"], next_forecast["yhat_original"]),
-            xytext=(5, 8),
-            textcoords="offset points",
-            fontsize=7,
-            fontweight="bold",
-            color="#111827",
-        )
-        ax_main.set_xlabel("Fecha")
-        ax_main.set_ylabel("Ventas (S/)")
-        ax_main.legend(frameon=False, ncol=5, fontsize=7, loc="upper left")
-        fig_main.autofmt_xdate()
-        fig_main.tight_layout()
-        st.pyplot(fig_main, use_container_width=True)
-        plt.close(fig_main)
+        
+        st.plotly_chart(fig_main, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Predicciones futuras
@@ -766,29 +824,74 @@ def show_panel():
         st.markdown(
             "<div class='chart-shell'>"
             "<div class='section-title'>Comparativa de Modelos: Ventana de Prueba</div>"
-            "<div class='section-caption'>Desempeño real vs. predicciones de Prophet y Media Móvil en las últimas 4 semanas de prueba.</div>",
+            "<div class='section-caption'>Desempeño real vs. predicciones de Prophet y Media Móvil en las últimas 4 semanas de prueba. Mueve el cursor para comparar.</div>",
             unsafe_allow_html=True,
         )
 
-        fig_comp, ax_comp = plt.subplots(figsize=(11.6, 4.2))
-        _apply_chart_style(fig_comp, ax_comp)
+        fig_comp = go.Figure()
         
         slice_4w = recent_eval.tail(4).copy()
         
-        ax_comp.plot(slice_4w["ds"], slice_4w["y"], color="#000000", marker="o", linewidth=2.0, label="Real")
-        ax_comp.plot(slice_4w["ds"], slice_4w["yhat_original"], color="#10b981", linestyle="--", marker="s", linewidth=1.8, label="Prophet")
-        ax_comp.plot(slice_4w["ds"], slice_4w["ma_pred"], color="#3b82f6", linestyle="--", marker="^", linewidth=1.8, label="Media Móvil")
+        # Real
+        fig_comp.add_trace(go.Scatter(
+            x=slice_4w["ds"],
+            y=slice_4w["y"],
+            mode="lines+markers",
+            name="Real",
+            line=dict(color="#000000", width=2.2),
+            marker=dict(size=7, symbol="circle", color="#000000"),
+            hovertemplate="Real: S/ %{y:,.2f}<extra></extra>"
+        ))
         
-        ax_comp.set_xlabel("Fecha")
-        ax_comp.set_ylabel("Ventas (S/)")
-        ax_comp.legend(frameon=False, fontsize=8, loc="upper left")
+        # Prophet
+        fig_comp.add_trace(go.Scatter(
+            x=slice_4w["ds"],
+            y=slice_4w["yhat_original"],
+            mode="lines+markers",
+            name="Prophet",
+            line=dict(color="#10b981", width=2, dash="dash"),
+            marker=dict(size=7, symbol="square", color="#10b981"),
+            hovertemplate="Prophet: S/ %{y:,.2f}<extra></extra>"
+        ))
         
-        ax_comp.set_xticks(slice_4w["ds"])
-        ax_comp.set_xticklabels([d.strftime('%Y-%m-%d') for d in slice_4w["ds"]], fontsize=7)
+        # Media Móvil
+        fig_comp.add_trace(go.Scatter(
+            x=slice_4w["ds"],
+            y=slice_4w["ma_pred"],
+            mode="lines+markers",
+            name="Media Móvil",
+            line=dict(color="#3b82f6", width=2, dash="dash"),
+            marker=dict(size=7, symbol="triangle-up", color="#3b82f6"),
+            hovertemplate="Media Móvil: S/ %{y:,.2f}<extra></extra>"
+        ))
         
-        fig_comp.tight_layout()
-        st.pyplot(fig_comp, use_container_width=True)
-        plt.close(fig_comp)
+        fig_comp.update_layout(
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=300,
+            hovermode="x unified",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                font=dict(size=9)
+            ),
+            xaxis=dict(
+                gridcolor="#f1f5f9",
+                tickfont=dict(size=9, color="#64748b"),
+                tickvals=slice_4w["ds"],
+                ticktext=[d.strftime('%Y-%m-%d') for d in slice_4w["ds"]]
+            ),
+            yaxis=dict(
+                gridcolor="#f1f5f9",
+                tickfont=dict(size=9, color="#64748b"),
+                tickprefix="S/ "
+            )
+        )
+        
+        st.plotly_chart(fig_comp, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
         # 2. Tarjetas métricas de errores y modelo ganador
