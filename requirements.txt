@@ -12,3 +12,4 @@ shap
 prophet
 joblib
 holidays
+xgboost
