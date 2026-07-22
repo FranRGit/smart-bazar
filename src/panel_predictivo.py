@@ -411,3 +411,9 @@ def _render_tab_explicabilidad():
         > hacia EFECTIVO.
         """
     )
+
+
+# Alias explícito de importación
+show_predictivo_panel = show_panel
+__all__ = ["show_panel", "show_predictivo_panel"]
+
