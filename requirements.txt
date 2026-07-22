@@ -9,3 +9,6 @@ mlxtend
 nbformat
 scikit-learn
 shap
+prophet
+joblib
+holidays

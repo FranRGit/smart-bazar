@@ -14,6 +14,11 @@ from src.category_rules import (
 )
 from src.data_loader import load_detalle_ventas, load_inventario
 
+try:
+    from src import panel_forecast
+except Exception:  # pragma: no cover - fallback for direct execution
+    import panel_forecast
+
 st.set_page_config(
     page_title="SmartBazar — Dashboard Data Mining",
     page_icon="🛒",
@@ -507,6 +512,11 @@ elif opcion_sel == "Clasificación":
 #  5. PREDICCIONES (SERIES TEMPORALES)
 # ═══════════════════════════════════════════════════════════════
 elif opcion_sel == "Predicciones":
-    show_forecast()
+    panel_forecast.show_panel()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  6. POS INTELIGENTE
+# ═══════════════════════════════════════════════════════════════
 elif opcion_sel == "POS Inteligente":
     show_pos()
