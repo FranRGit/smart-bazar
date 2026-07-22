@@ -105,6 +105,79 @@ def _inject_styles() -> None:
             margin-bottom: 1.2rem;
         }
 
+        /* ── Flip Card Styles ── */
+        .flip-card {
+            background-color: transparent;
+            width: 100%;
+            height: 135px;
+            perspective: 1000px;
+            margin-bottom: 1.2rem;
+        }
+
+        .flip-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+
+        .flip-card:hover .flip-card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .flip-card-front, .flip-card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: 18px;
+            box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-sizing: border-box;
+        }
+
+        .flip-card-front {
+            background: rgba(255, 255, 255, 0.95);
+            color: #111827;
+            padding: 1rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: left;
+        }
+
+        .flip-card-back {
+            background: #0f172a;
+            color: #ffffff;
+            transform: rotateY(180deg);
+            padding: 1rem 1.15rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: left;
+        }
+
+        .back-title {
+            font-size: 0.64rem;
+            font-weight: 800;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.35rem;
+        }
+
+        .back-body {
+            font-size: 0.72rem;
+            line-height: 1.35;
+            color: #f1f5f9;
+        }
+        
+        .back-body b {
+            color: #f8fafc;
+        }
+
         .metric-kicker {
             display: block;
             color: #6b7280;
@@ -503,11 +576,18 @@ def _fit_moving_average_frame(weekly_df: pd.DataFrame, horizon_weeks: int, windo
     return history, future
 
 
-def _render_metric_card(title: str, value: str, note: str, accent: bool = False, positive: bool = False) -> None:
+def _render_metric_card(
+    title: str,
+    value: str,
+    note: str,
+    back_error_calc: str,
+    back_estimation: str,
+    accent: bool = False,
+    positive: bool = False
+) -> None:
     """
-    Renderiza una tarjeta de métrica en la interfaz de usuario de Streamlit.
+    Renderiza una tarjeta de métrica con efecto flip en 3D en la interfaz de usuario de Streamlit.
     """
-    classes = "metric-card"
     value_class = "metric-value"
     note_class = "metric-note"
     value = value.replace("\n", "<br>")
@@ -517,10 +597,27 @@ def _render_metric_card(title: str, value: str, note: str, accent: bool = False,
     if positive:
         value_class += " metric-positive"
         note_class += " metric-positive"
+        
     st.markdown(
-        f"<div class='{classes}'><span class='metric-kicker'>{title}</span>"
-        f"<span class='{value_class}'>{value}</span>"
-        f"<span class='{note_class}'>{note}</span></div>",
+        f"""
+        <div class='flip-card'>
+            <div class='flip-card-inner'>
+                <div class='flip-card-front'>
+                    <span class='metric-kicker'>{title}</span>
+                    <span class='{value_class}'>{value}</span>
+                    <span class='{note_class}'>{note}</span>
+                </div>
+                <div class='flip-card-back'>
+                    <div class='back-title'>Métrica y Estimación</div>
+                    <div class='back-body'>
+                        <b>Cálculo:</b> {back_error_calc}<br>
+                        <div style='height: 0.35rem;'></div>
+                        <b>Estimación:</b> {back_estimation}
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -900,19 +997,25 @@ def show_panel():
             _render_metric_card(
                 "Error Prophet",
                 f"RMSE: {prophet_rmse:,.1f}\nMAPE: {prophet_mape:.1f}%".replace(",", "."),
-                "Calculado en ventana de prueba (test)"
+                "Calculado en ventana de prueba (test)",
+                "Diferencia cuadrática (RMSE) y error porcentual absoluto medio (MAPE) de Prophet vs. Real.",
+                "Modelado bayesiano por Prophet ajustando estacionalidades, feriados peruanos y calendario escolar."
             )
         with col_met2:
             _render_metric_card(
                 "Error Media Móvil",
                 f"RMSE: {ma_rmse:,.1f}\nMAPE: {ma_mape:.1f}%".replace(",", "."),
-                f"Baseline (Ventana {int(ma_params.get('window', 3))})"
+                f"Baseline (Ventana {int(ma_params.get('window', 3))})",
+                "Desviación del promedio móvil de 3 semanas históricas respecto a las ventas reales.",
+                "Predicción simple extrapolada usando la media aritmética de la ventana de tiempo del modelo base."
             )
         with col_met3:
             _render_metric_card(
                 "Ganador Dinámico",
                 winner,
                 winner_note,
+                "Comparación del error combinado RMSE + MAPE de ambos modelos en la ventana de prueba.",
+                "Selección automática del algoritmo con la menor varianza y mayor precisión de backtesting.",
                 accent=True,
                 positive=True
             )
@@ -978,6 +1081,8 @@ def show_panel():
                 "Ventas Históricas", 
                 _currency(total_history), 
                 f"Última semana: {_currency_2(last_hist['y'])}", 
+                "Sumatoria agregada de todos los ingresos de ventas registrados en ventas.csv.",
+                "Acumulado real histórico neto de transacciones en caja procesadas por el sistema.",
                 positive=True
             )
         with col_res2:
@@ -985,6 +1090,8 @@ def show_panel():
                 "Ventas Promedio", 
                 _currency(avg_weekly), 
                 f"Media semanal global ({len(weekly_df)} semanas)", 
+                "Media aritmética global de ingresos dividida por el total de semanas analizadas.",
+                "Línea base representativa del ingreso típico semanal esperado en condiciones normales.",
                 accent=True
             )
         with col_res3:
@@ -992,6 +1099,8 @@ def show_panel():
                 "Pronóstico Próxima Semana", 
                 _currency_2(float(next_forecast['yhat_original'])), 
                 f"Intervalo: {_currency_2(float(next_forecast['yhat_lower_original']))} - {_currency_2(float(next_forecast['yhat_upper_original']))}", 
+                "Límites superior e inferior que abarcan el 80% del intervalo de confianza predictivo.",
+                "Proyección central de Prophet para la siguiente semana incluyendo estacionalidades locales.",
                 accent=True,
                 positive=True
             )
