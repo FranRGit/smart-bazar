@@ -344,6 +344,59 @@ def load_association_data():
 
 
 def render_association_panel():
+    st.markdown(
+        """
+        <style>
+        /* ── KPI Cards (Local) ── */
+        .kpi-card {
+            background: rgba(255,255,255,0.65) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border-radius: 14px !important;
+            padding: 1.2rem 1.3rem !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
+            border: 1px solid rgba(255,255,255,0.8) !important;
+            min-height: 110px !important;
+        }
+        .kpi-title { font-size: 0.68rem !important; color: #777777 !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: 0.06em !important; margin-bottom: 0.6rem !important; display: block !important; }
+        .kpi-value { font-size: 1.5rem !important; font-weight: 800 !important; color: #000000 !important; line-height: 1.2 !important; display: block !important; margin-bottom: 0.3rem !important; word-break: break-word !important; }
+        .kpi-delta { font-size: 0.72rem !important; color: #5D5F5F !important; font-weight: 600 !important; display: block !important; line-height: 1.3 !important; }
+
+        /* ── Insight Cards (Local) ── */
+        .insight-card {
+            background: rgba(255,255,255,0.7) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border-radius: 14px !important;
+            padding: 1rem 1.2rem !important;
+            border: 1px solid rgba(0,0,0,0.06) !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.03) !important;
+            margin-bottom: 0.8rem !important;
+        }
+        .insight-badge {
+            font-size: 0.62rem !important; font-weight: 800 !important; background: #000000 !important; color: #ffffff !important;
+            padding: 0.15rem 0.45rem !important; border-radius: 5px !important; text-transform: uppercase !important;
+            letter-spacing: 0.04em !important; display: inline-block !important; margin-bottom: 0.4rem !important;
+        }
+        .insight-title { font-size: 0.88rem !important; font-weight: 800 !important; color: #000000 !important; margin: 0 0 0.3rem 0 !important; }
+        .insight-body { font-size: 0.8rem !important; color: #5D5F5F !important; line-height: 1.5 !important; margin: 0 !important; }
+
+        /* ── Controls Panel (Local) ── */
+        .ctrl-panel {
+            background: rgba(255,255,255,0.65) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border-radius: 16px !important;
+            padding: 1.2rem !important;
+            border: 1px solid rgba(255,255,255,0.8) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
+            margin-bottom: 1rem !important;
+        }
+        .ctrl-title { font-size: 0.88rem !important; font-weight: 800 !important; color: #000000 !important; margin: 0 !important; }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
     section_header("Descubrimiento de Patrones (Apriori)", "Reglas reales por categoría analítica, con auditoría y trazabilidad del catálogo.")
     ventas_cat, auditoria = load_association_data()
     c1, c2, c3, c4 = st.columns([1.25, 1, 1, 1])
