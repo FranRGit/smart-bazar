@@ -101,6 +101,7 @@ def _inject_styles() -> None:
         .metric-card {
             padding: 1rem 0.95rem;
             min-height: 124px;
+            margin-bottom: 1.2rem;
         }
 
         .metric-kicker {
