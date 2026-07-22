@@ -764,6 +764,35 @@ def show_panel():
             unsafe_allow_html=True,
         )
 
+        # Gráfica comparativa de las últimas 4 semanas (Prophet vs. Media Móvil vs. Real)
+        st.markdown(
+            "<div class='chart-shell'>"
+            "<div class='section-title'>Comparativa de Modelos: Ventana de Prueba</div>"
+            "<div class='section-caption'>Desempeño real vs. predicciones de Prophet y Media Móvil en las últimas 4 semanas de prueba.</div>",
+            unsafe_allow_html=True,
+        )
+
+        fig_comp, ax_comp = plt.subplots(figsize=(11.6, 4.2))
+        _apply_chart_style(fig_comp, ax_comp)
+        
+        slice_4w = recent_eval.tail(4).copy()
+        
+        ax_comp.plot(slice_4w["ds"], slice_4w["y"], color="#000000", marker="o", linewidth=2.0, label="Real")
+        ax_comp.plot(slice_4w["ds"], slice_4w["yhat_original"], color="#10b981", linestyle="--", marker="s", linewidth=1.8, label="Prophet")
+        ax_comp.plot(slice_4w["ds"], slice_4w["ma_pred"], color="#3b82f6", linestyle="--", marker="^", linewidth=1.8, label="Media Móvil")
+        
+        ax_comp.set_xlabel("Fecha")
+        ax_comp.set_ylabel("Ventas (S/)")
+        ax_comp.legend(frameon=False, fontsize=8, loc="upper left")
+        
+        ax_comp.set_xticks(slice_4w["ds"])
+        ax_comp.set_xticklabels([d.strftime('%Y-%m-%d') for d in slice_4w["ds"]], fontsize=7)
+        
+        fig_comp.tight_layout()
+        st.pyplot(fig_comp, use_container_width=True)
+        plt.close(fig_comp)
+        st.markdown("</div>", unsafe_allow_html=True)
+
         # 2. Tarjetas métricas de errores y modelo ganador
         col_met1, col_met2, col_met3 = st.columns(3)
         with col_met1:
