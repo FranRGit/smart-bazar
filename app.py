@@ -273,6 +273,65 @@ i {
 """
 st.markdown(css, unsafe_allow_html=True)
 
+
+# ═══════════════════════════════════════════════════════════════
+#  HELPERS
+# ═══════════════════════════════════════════════════════════════
+def apply_chart_style(fig, ax, title="", xlabel="", ylabel=""):
+    """Estilo limpio para gráficos matplotlib alineados con la estética glass."""
+    fig.patch.set_facecolor('none')
+    fig.patch.set_alpha(0)
+    ax.set_facecolor('#ffffff')
+    ax.set_alpha(0.9)
+    ax.tick_params(colors='#1c1b1b', labelsize=8)
+    ax.xaxis.label.set_color('#5D5F5F')
+    ax.yaxis.label.set_color('#5D5F5F')
+    for spine in ax.spines.values():
+        spine.set_color('#e5e5e5')
+    ax.grid(True, alpha=0.25, color='#e5e5e5', linestyle='--')
+    if title:
+        ax.set_title(title, fontsize=10, fontweight='bold', color='#000000', pad=10)
+    if xlabel:
+        ax.set_xlabel(xlabel, fontsize=8, fontweight='semibold', labelpad=6)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=8, fontweight='semibold', labelpad=6)
+    fig.tight_layout()
+
+
+def kpi(title, value, delta="", alert=False):
+    val_color = "#ef4444" if alert else "#000000"
+    border = "1px solid rgba(239,68,68,0.5)" if alert else "1px solid rgba(255,255,255,0.8)"
+    st.markdown(
+        f'<div class="kpi-card" style="border: {border};">'
+        f'<span class="kpi-title">{title}</span>'
+        f'<span class="kpi-value" style="color: {val_color};">{value}</span>'
+        f'<span class="kpi-delta">{delta}</span></div>',
+        unsafe_allow_html=True
+    )
+
+
+def insight(title, content, badge="INSIGHT DE NEGOCIO"):
+    st.markdown(
+        f'<div class="insight-card"><span class="insight-badge">{badge}</span>'
+        f'<p class="insight-title">{title}</p>'
+        f'<p class="insight-body">{content}</p></div>',
+        unsafe_allow_html=True
+    )
+
+
+def section_header(title, subtitle):
+    st.markdown(
+        f'<div style="margin-bottom: 1.5rem;">'
+        f'<h1 style="font-size: 1.8rem; font-weight: 800; color: #000000; margin: 0 0 4px 0; letter-spacing: -0.02em;">{title}</h1>'
+        f'<p style="font-size: 0.88rem; color: #5D5F5F; margin: 0;">{subtitle}</p></div>',
+        unsafe_allow_html=True
+    )
+
+
+def ctrl_header(label):
+    st.markdown(f'<div class="ctrl-panel"><p class="ctrl-title">⚙️ {label}</p></div>', unsafe_allow_html=True)
+
+
 # ═══════════════════════════════════════════════════════════════
 #  4. SIDEBAR REFACTORIZADO (FIEL A IMAGEN DE REFERENCIA 2)
 # ═══════════════════════════════════════════════════════════════
@@ -395,54 +454,7 @@ elif opcion_sel == "Reglas de Asociación":
 #  4. CLASIFICACIÓN
 # ═══════════════════════════════════════════════════════════════
 elif opcion_sel == "Clasificación":
-    section_header("Clasificación Predictiva de Método de Pago", "Evaluación comparativa de Random Forest vs XGBoost y explicabilidad con SHAP.")
-
-    # ── Control + KPIs en fila ──
-    c0, c1, c2, c3 = st.columns([1.2, 1, 1, 1])
-    with c0:
-        ctrl_header("Selector de Algoritmo")
-        mod_sel = st.selectbox("Modelo:", ["XGBoost (Recomendado)", "Random Forest"])
-
-    if "XGBoost" in mod_sel:
-        f1_v, acc_v, auc_v = "0.400", "58.5%", "0.901"
-        cm = np.array([[151, 26], [25, 90]])
-    else:
-        f1_v, acc_v, auc_v = "0.387", "61.2%", "0.883"
-        cm = np.array([[145, 32], [28, 87]])
-
-    with c1: kpi("F1-Score", f1_v, "class_weight = 'balanced'")
-    with c2: kpi("Accuracy", acc_v, "Tasa de aciertos en test")
-    with c3: kpi("ROC-AUC", auc_v, "Capacidad de discriminación")
-
-    st.markdown("<div style='height: 1.2rem;'></div>", unsafe_allow_html=True)
-
-    tab1, tab2 = st.tabs(["🧮 Matriz de Confusión", "💡 Importancia SHAP"])
-
-    with tab1:
-        fig, ax = plt.subplots(figsize=(6, 4))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Greys", cbar=False, xticklabels=["Pred: EFECTIVO", "Pred: YAPE"], yticklabels=["Real: EFECTIVO", "Real: YAPE"], annot_kws={"size": 16, "weight": "bold"}, ax=ax, linewidths=2, linecolor='white')
-        apply_chart_style(fig, ax, title=f"Matriz de Confusión — {mod_sel}")
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with tab2:
-        fig, ax = plt.subplots(figsize=(10, 3.5))
-        features = ["Total_Ticket", "Es_Fin_de_Semana", "pct_Fotocopiadora", "n_items", "es_cliente_recurrente"]
-        importancias = [0.38, 0.24, 0.18, 0.12, 0.08]
-        bars = ax.barh(range(len(features)), importancias, color='#0f172a', edgecolor='white', height=0.5)
-        ax.set_yticks(range(len(features)))
-        ax.set_yticklabels(features, fontweight='bold', fontsize=9, color='#000000')
-        ax.invert_yaxis()
-        for bar, v in zip(bars, importancias):
-            ax.text(bar.get_width() + 0.008, bar.get_y() + bar.get_height()/2, f'{v:.2f}', va='center', fontsize=8, fontweight='bold', color='#000000')
-        apply_chart_style(fig, ax, title="Importancia Global de Variables (|SHAP value|)", xlabel="Impacto Medio Absoluto")
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
-    ic1, ic2 = st.columns(2)
-    with ic1: insight("Preferencia por F1-Score", "El desbalance Efectivo (66.3%) vs Yape (33.7%) invalida la Accuracy como métrica principal. El F1-Score pondera Precision y Recall equitativamente.", badge="JUSTIFICACIÓN TÉCNICA")
-    with ic2: insight("Explicabilidad Financiera", "Montos altos y compras en fin de semana son los impulsores clave del uso de billeteras digitales (Yape) sobre el efectivo.", badge="SHAP INSIGHT")
+    show_predictivo()
 
 
 # ═══════════════════════════════════════════════════════════════

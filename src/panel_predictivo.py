@@ -324,3 +324,7 @@ def render():
             f"real pero no muy fuerte.",
             badge="SHAP INSIGHT"
         )
+
+
+# Alias para compatibilidad con app.py
+show_panel = render
