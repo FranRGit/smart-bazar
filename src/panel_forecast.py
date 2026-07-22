@@ -609,135 +609,145 @@ def show_panel():
 
     # Renderizar la sección principal con los resultados del pronóstico
     with right_col:
-        forecast_hist, forecast_future = _fit_forecast_frame(model, weekly_df, horizon_weeks)
-        ma_history, ma_future = _fit_moving_average_frame(
-            weekly_df,
-            horizon_weeks,
-            int(ma_params.get("window", 3)),
-            float(ma_params.get("last_mean", weekly_df["y"].tail(int(ma_params.get("window", 3))).mean())),
-        )
-        future_rows = forecast_future[forecast_future["ds"] > weekly_df["ds"].max()].copy().reset_index(drop=True)
-        if future_rows.empty:
-            future_rows = forecast_future.tail(1).copy().reset_index(drop=True)
-        recent_window = 8 if focus_year == "Ultimas 8 semanas" else 12 if focus_year == "Ultimas 12 semanas" else min(4, len(weekly_df))
-        backtest_window = min(max(recent_window, 4), max(4, len(weekly_df) // 4 if len(weekly_df) >= 8 else len(weekly_df)))
-        error_df = _build_backtest_frame(weekly_df, forecast_hist, ma_history, window=backtest_window)
-
-        if not run_model:
-            st.markdown(
-                "<div class='panel-card'>Presiona <b>Ejecutar modelo</b> para refrescar el pronostico con el horizonte seleccionado.</div>",
-                unsafe_allow_html=True,
-            )
-
-        last_hist = weekly_df.iloc[-1]
-        next_forecast = future_rows.iloc[0]
-        total_history = float(weekly_df["y"].sum())
-        avg_weekly = float(weekly_df["y"].mean())
-
-        recent_eval = weekly_df[["ds", "y"]].merge(forecast_hist[["ds", "yhat_original"]], on="ds", how="left")
-        recent_eval["ma_pred"] = recent_eval["y"].rolling(window=3, min_periods=1).mean().shift(1)
-        recent_eval["ma_pred"] = recent_eval["ma_pred"].fillna(recent_eval["y"].expanding().mean())
-        recent_slice = recent_eval.tail(backtest_window)
-
-        prophet_rmse, prophet_mape = _safe_metrics(recent_slice["y"].to_numpy(), recent_slice["yhat_original"].to_numpy())
-        ma_rmse, ma_mape = _safe_metrics(recent_slice["y"].to_numpy(), recent_slice["ma_pred"].to_numpy())
-        prophet_score = prophet_rmse + prophet_mape
-        ma_score = ma_rmse + ma_mape
-        if prophet_score < ma_score:
-            winner = "Prophet"
-            winner_note = "Menor error combinado en RMSE + MAPE"
-        elif ma_score < prophet_score:
-            winner = "Media Movil"
-            winner_note = f"Ventana {int(ma_params.get('window', 3))} y ultimo promedio exportado"
-        else:
-            winner = "Empate"
-            winner_note = "Ambos modelos muestran el mismo error combinado"
-
+        # Título principal del panel (este queda fijo arriba de los tabs)
         st.markdown(
             "<div class='forecast-header'>"
             "<div>"
             "<h1 class='forecast-title'>Panel de Series Temporales</h1>"
             "<p class='forecast-subtitle'>Gestion avanzada de ventas y pronostico analitico con Prophet.</p>"
             "</div>"
-            f"<div class='panel-card' style='min-width: 340px; margin: 0;'>"
-            f"<div class='section-title'>Horizonte de Prediccion</div>"
-            f"<div class='section-caption'>Próximas {horizon_weeks} semanas</div>"
-            f"<div style='font-size: 1.55rem; font-weight: 800; color: #111827;'>Semana de arranque: {next_forecast['ds'].strftime('%d/%m/%Y')}</div>"
-            "</div>"
             "</div>",
             unsafe_allow_html=True,
         )
 
-        # Renderizar las tarjetas de métricas con los resultados del pronóstico y las evaluaciones de los modelos
-        metric_cols = st.columns(6, gap="small")
-        with metric_cols[0]:
-            _render_metric_card("Ventas Historicas", _currency(total_history), f"Ultima semana: {_currency_2(last_hist['y'])}", positive=True)
-        with metric_cols[1]:
-            _render_metric_card("Ventas Promedio", _currency(avg_weekly), f"Benchmark MA: ventana {int(ma_params.get('window', 3))}", accent=True)
-        with metric_cols[2]:
-            _render_metric_card("Pronostico Proxima Semana", _currency_2(float(next_forecast['yhat_original'])), f"Intervalo: {_currency_2(float(next_forecast['yhat_lower_original']))} - {_currency_2(float(next_forecast['yhat_upper_original']))}", accent=True)
-        with metric_cols[3]:
-            _render_metric_card("Prophet", f"RMSE {prophet_rmse:,.1f}\nMAPE {prophet_mape:.1f}%".replace(",", "."), "Backtesting reciente", positive=True)
-        with metric_cols[4]:
-            _render_metric_card("Media Movil", f"RMSE {ma_rmse:,.1f}\nMAPE {ma_mape:.1f}%".replace(",", "."), f"Modelo exportado: window {int(ma_params.get('window', 3))}", positive=True)
-        with metric_cols[5]:
-            _render_metric_card("Ganador dinamico", winner, winner_note, accent=True, positive=True)
+        tab1, tab2, tab3 = st.tabs([
+            "🔮 Pronóstico y Proyecciones",
+            "📊 Evaluación de Modelos",
+            "💰 Resumen de Ventas"
+        ])
 
-        st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
+        # ── TAB 1: Pronóstico y Proyecciones ──────────────────────────────────
+        with tab1:
+            st.markdown("<div class='panel-card'>", unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Ajustes de pronóstico</div>", unsafe_allow_html=True)
+            st.markdown("<div class='section-caption'>Ajusta los parámetros para volver a ejecutar el modelo de series temporales.</div>", unsafe_allow_html=True)
 
-        st.markdown(
-            "<div class='chart-shell'>"
-            "<div class='section-title'>Evolucion de Ventas Semanales</div>"
-            "<div class='section-caption'>Historial real, pronostico Prophet, intervalo de confianza y media movil exportada.</div>",
-            unsafe_allow_html=True,
-        )
+            col_adj1, col_adj2, col_adj3 = st.columns([2, 2, 1])
+            with col_adj1:
+                horizon_options = [4, 8, 12, 16, 24, 52]
+                horizon_weeks = st.select_slider(
+                    "Horizonte de prediccion",
+                    options=horizon_options,
+                    value=4,
+                    format_func=lambda value: f"Proximas {value} semanas",
+                    key="horizon_weeks"
+                )
+            with col_adj2:
+                focus_year = st.select_slider(
+                    "Vista de analisis",
+                    options=["Resumen temporal", "Ultimas 8 semanas", "Ultimas 12 semanas"],
+                    value="Resumen temporal",
+                    key="focus_year"
+                )
+            with col_adj3:
+                st.markdown("<div style='height: 1.8rem;'></div>", unsafe_allow_html=True)
+                run_model = st.button("Ejecutar modelo", use_container_width=True, key="run_model")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        # Renderizar el gráfico principal con las ventas reales, el pronóstico de Prophet, el intervalo de confianza y la media móvil
-        fig_main, ax_main = plt.subplots(figsize=(11.6, 4.2))
-        _apply_chart_style(fig_main, ax_main)
-        ax_main.plot(weekly_df["ds"], weekly_df["y"], color="#000000", linewidth=2.0, label="Ventas Reales")
-        ax_main.plot(forecast_hist["ds"], forecast_hist["yhat_original"], color="#737373", linewidth=1.8, linestyle=":", label="Prophet Ajuste")
-        prophet_future_plot = forecast_future[forecast_future["ds"] >= weekly_df["ds"].max()]
-        ax_main.plot(prophet_future_plot["ds"], prophet_future_plot["yhat_original"], color="#1f2937", linewidth=2.0, linestyle="--", label="Prophet Futuro")
-        ax_main.fill_between(
-            forecast_future["ds"],
-            forecast_future["yhat_lower_original"],
-            forecast_future["yhat_upper_original"],
-            color="#000000",
-            alpha=0.08,
-            label="Intervalo de Confianza",
-        )
+            # CÓMPUTOS DEL MODELO (se ejecutan en Tab 1 y quedan disponibles para el resto de pestañas)
+            forecast_hist, forecast_future = _fit_forecast_frame(model, weekly_df, horizon_weeks)
+            ma_history, ma_future = _fit_moving_average_frame(
+                weekly_df,
+                horizon_weeks,
+                int(ma_params.get("window", 3)),
+                float(ma_params.get("last_mean", weekly_df["y"].tail(int(ma_params.get("window", 3))).mean())),
+            )
+            future_rows = forecast_future[forecast_future["ds"] > weekly_df["ds"].max()].copy().reset_index(drop=True)
+            if future_rows.empty:
+                future_rows = forecast_future.tail(1).copy().reset_index(drop=True)
+            
+            recent_window = 8 if focus_year == "Ultimas 8 semanas" else 12 if focus_year == "Ultimas 12 semanas" else min(4, len(weekly_df))
+            backtest_window = min(max(recent_window, 4), max(4, len(weekly_df) // 4 if len(weekly_df) >= 8 else len(weekly_df)))
+            error_df = _build_backtest_frame(weekly_df, forecast_hist, ma_history, window=backtest_window)
 
+            last_hist = weekly_df.iloc[-1]
+            next_forecast = future_rows.iloc[0]
+            total_history = float(weekly_df["y"].sum())
+            avg_weekly = float(weekly_df["y"].mean())
 
-        # Calcular la media móvil de las ventas reales para el gráfico
-        ma_line = weekly_df["y"].rolling(window=3, min_periods=1).mean()
-        ax_main.plot(ma_history["ds"], ma_history["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.8, label="Media Movil")
-        ax_main.plot(ma_future["ds"], ma_future["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.4, linestyle="--")
-        ax_main.scatter([next_forecast["ds"]], [next_forecast["yhat_original"]], color="#111827", s=28, zorder=5)
-        ax_main.annotate(
-            f"Hoy S/ {next_forecast['yhat_original']:,.0f}".replace(",", "."),
-            xy=(next_forecast["ds"], next_forecast["yhat_original"]),
-            xytext=(5, 8),
-            textcoords="offset points",
-            fontsize=7,
-            fontweight="bold",
-            color="#111827",
-        )
-        ax_main.set_xlabel("Fecha")
-        ax_main.set_ylabel("Ventas (S/)")
-        ax_main.legend(frameon=False, ncol=5, fontsize=7, loc="upper left")
-        fig_main.autofmt_xdate()
-        fig_main.tight_layout()
-        st.pyplot(fig_main, use_container_width=True)
-        plt.close(fig_main)
-        st.markdown("</div>", unsafe_allow_html=True)
+            recent_eval = weekly_df[["ds", "y"]].merge(forecast_hist[["ds", "yhat_original"]], on="ds", how="left")
+            recent_eval["ma_pred"] = recent_eval["y"].rolling(window=3, min_periods=1).mean().shift(1)
+            recent_eval["ma_pred"] = recent_eval["ma_pred"].fillna(recent_eval["y"].expanding().mean())
+            recent_slice = recent_eval.tail(backtest_window)
 
-        bottom_left, bottom_right = st.columns([1.05, 0.95], gap="large")
+            prophet_rmse, prophet_mape = _safe_metrics(recent_slice["y"].to_numpy(), recent_slice["yhat_original"].to_numpy())
+            ma_rmse, ma_mape = _safe_metrics(recent_slice["y"].to_numpy(), recent_slice["ma_pred"].to_numpy())
+            
+            prophet_score = prophet_rmse + prophet_mape
+            ma_score = ma_rmse + ma_mape
+            if prophet_score < ma_score:
+                winner = "Prophet"
+                winner_note = "Menor error combinado en RMSE + MAPE"
+            elif ma_score < prophet_score:
+                winner = "Media Movil"
+                winner_note = f"Ventana {int(ma_params.get('window', 3))} y ultimo promedio exportado"
+            else:
+                winner = "Empate"
+                winner_note = "Ambos modelos muestran el mismo error combinado"
 
-        # Renderizar la sección de predicciones futuras con detalles del horizonte seleccionado
-        with bottom_left:
+            if not run_model:
+                st.info("ℹ️ Modifica el horizonte de predicción arriba y presiona **Ejecutar modelo** para actualizar los pronósticos en tiempo real.")
+
+            # Gráfico: Evolución de ventas semanales
             st.markdown(
-                "<div class='panel-card'><div class='section-title'>Predicciones Futuras</div><div class='section-caption'>Detalle del horizonte seleccionado.</div>",
+                "<div class='chart-shell'>"
+                "<div class='section-title'>Evolucion de Ventas Semanales</div>"
+                "<div class='section-caption'>Historial real, pronostico Prophet, intervalo de confianza y media movil exportada.</div>",
+                unsafe_allow_html=True,
+            )
+            
+            fig_main, ax_main = plt.subplots(figsize=(11.6, 4.2))
+            _apply_chart_style(fig_main, ax_main)
+            ax_main.plot(weekly_df["ds"], weekly_df["y"], color="#000000", linewidth=2.0, label="Ventas Reales")
+            ax_main.plot(forecast_hist["ds"], forecast_hist["yhat_original"], color="#737373", linewidth=1.8, linestyle=":", label="Prophet Ajuste")
+            prophet_future_plot = forecast_future[forecast_future["ds"] >= weekly_df["ds"].max()]
+            ax_main.plot(prophet_future_plot["ds"], prophet_future_plot["yhat_original"], color="#1f2937", linewidth=2.0, linestyle="--", label="Prophet Futuro")
+            ax_main.fill_between(
+                forecast_future["ds"],
+                forecast_future["yhat_lower_original"],
+                forecast_future["yhat_upper_original"],
+                color="#000000",
+                alpha=0.08,
+                label="Intervalo de Confianza",
+            )
+            ax_main.plot(ma_history["ds"], ma_history["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.8, label="Media Movil")
+            ax_main.plot(ma_future["ds"], ma_future["ma_pred"], color="#a3a3a3", linewidth=1.2, alpha=0.4, linestyle="--")
+            ax_main.scatter([next_forecast["ds"]], [next_forecast["yhat_original"]], color="#111827", s=28, zorder=5)
+            ax_main.annotate(
+                f"Hoy S/ {next_forecast['yhat_original']:,.0f}".replace(",", "."),
+                xy=(next_forecast["ds"], next_forecast["yhat_original"]),
+                xytext=(5, 8),
+                textcoords="offset points",
+                fontsize=7,
+                fontweight="bold",
+                color="#111827",
+            )
+            ax_main.set_xlabel("Fecha")
+            ax_main.set_ylabel("Ventas (S/)")
+            ax_main.legend(frameon=False, ncol=5, fontsize=7, loc="upper left")
+            fig_main.autofmt_xdate()
+            fig_main.tight_layout()
+            st.pyplot(fig_main, use_container_width=True)
+            plt.close(fig_main)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+
+            # Predicciones futuras
+            st.markdown(
+                "<div class='panel-card'>"
+                "<div class='section-title'>Predicciones Futuras Proyectadas</div>"
+                "<div class='section-caption'>Detalle del pronóstico semana a semana según el horizonte seleccionado.</div>",
                 unsafe_allow_html=True,
             )
             future_table = future_rows[["ds", "yhat_original", "yhat_lower_original", "yhat_upper_original"]].copy()
@@ -763,14 +773,71 @@ def show_panel():
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # Renderizar la sección de errores semanales (MAPE y RMSE) para ambos modelos
-        with bottom_right:
+            # Breve descripción del panel en la parte inferior
             st.markdown(
-                "<div class='panel-card'><div class='section-title'>Error Semanal (MAPE y RMSE)</div><div class='section-caption'>Ambos errores se muestran simultaneamente sin selector.</div>",
+                """
+                <div class='panel-card' style='background: #f8fafc; border-left: 4px solid #0f172a;'>
+                    <div class='section-title'>💡 Acerca del Panel de Pronóstico</div>
+                    <p style='font-size: 0.82rem; color: #475569; line-height: 1.5; margin: 0;'>
+                        Este panel implementa un modelo de series temporales avanzado basado en <b>Prophet</b> para pronosticar los ingresos semanales de la tienda, 
+                        incorporando variables exógenas como días festivos nacionales y calendarios de campañas escolares. Adicionalmente, evalúa y compara el desempeño 
+                        del modelo predictivo contra una <b>Media Móvil (Baseline)</b> para proporcionar una referencia simple de tendencia histórica.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        # ── TAB 2: Evaluación de Modelos ─────────────────────────────────────
+        with tab2:
+            # 1. Horizonte de predicción
+            st.markdown(
+                f"""
+                <div class='panel-card' style='background: #fdf8f8; border: 1px solid rgba(15,23,42,0.08);'>
+                    <div class='section-title'>⚙️ Configuración del Horizonte de Predicción</div>
+                    <div style='font-size: 1.15rem; font-weight: 800; color: #111827; margin-top: 0.4rem;'>
+                        Horizonte seleccionado: <span style='color: #8b5cf6;'>Próximas {horizon_weeks} semanas</span>
+                    </div>
+                    <div style='font-size: 0.9rem; color: #6b7280; margin-top: 0.2rem;'>
+                        Fecha de arranque de proyección: <b>{next_forecast['ds'].strftime('%d/%m/%Y')}</b>
+                    </div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
-            err_left, err_right = st.columns(2)
 
+            # 2. Tarjetas métricas de errores y modelo ganador
+            col_met1, col_met2, col_met3 = st.columns(3)
+            with col_met1:
+                _render_metric_card(
+                    "Error Prophet",
+                    f"RMSE: {prophet_rmse:,.1f}\nMAPE: {prophet_mape:.1f}%".replace(",", "."),
+                    "Calculado en ventana de prueba (test)"
+                )
+            with col_met2:
+                _render_metric_card(
+                    "Error Media Móvil",
+                    f"RMSE: {ma_rmse:,.1f}\nMAPE: {ma_mape:.1f}%".replace(",", "."),
+                    f"Baseline (Ventana {int(ma_params.get('window', 3))})"
+                )
+            with col_met3:
+                _render_metric_card(
+                    "Ganador Dinámico",
+                    winner,
+                    winner_note,
+                    accent=True,
+                    positive=True
+                )
+
+            # 3. Gráficos de barra comparativos de RMSE y MAPE
+            st.markdown(
+                "<div class='panel-card'>"
+                "<div class='section-title'>Comparativa de Errores por Semana (Backtesting)</div>"
+                "<div class='section-caption'>Análisis del error de pronóstico semanal promedio (MAPE) y la desviación cuadrática (RMSE).</div>",
+                unsafe_allow_html=True,
+            )
+
+            err_left, err_right = st.columns(2)
             with err_left:
                 fig_err_mape, ax_err_mape = plt.subplots(figsize=(4.3, 4.2))
                 _apply_chart_style(fig_err_mape, ax_err_mape)
@@ -806,12 +873,53 @@ def show_panel():
                     ax_err_rmse.text(idx + width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#52525b", fontweight="bold")
                 st.pyplot(fig_err_rmse, use_container_width=True)
                 plt.close(fig_err_rmse)
-
             st.markdown("</div>", unsafe_allow_html=True)
 
+        # ── TAB 3: Resumen de Ventas ──────────────────────────────────────────
+        with tab3:
+            st.markdown(
+                "<div class='panel-card'>"
+                "<div class='section-title'>Resumen de Desempeño de Ventas</div>"
+                "<div class='section-caption'>Indicadores clave de ventas históricas, promedio de facturación y proyección inmediata.</div>",
+                unsafe_allow_html=True,
+            )
 
-        st.markdown(
-            f"<div class='panel-card'>Actualizado con {len(weekly_df)} semanas historicas cargadas desde ventas.csv. "
-            f"El modelo Prophet se ejecuta desde {MODEL_PATH.name} y la media movil usa {MA_MODEL_PATH.name}.</div>",
-            unsafe_allow_html=True,
-        )
+            col_res1, col_res2, col_res3 = st.columns(3)
+            with col_res1:
+                _render_metric_card(
+                    "Ventas Históricas", 
+                    _currency(total_history), 
+                    f"Última semana: {_currency_2(last_hist['y'])}", 
+                    positive=True
+                )
+            with col_res2:
+                _render_metric_card(
+                    "Ventas Promedio", 
+                    _currency(avg_weekly), 
+                    f"Media semanal global ({len(weekly_df)} semanas)", 
+                    accent=True
+                )
+            with col_res3:
+                _render_metric_card(
+                    "Pronóstico Próxima Semana", 
+                    _currency_2(float(next_forecast['yhat_original'])), 
+                    f"Intervalo: {_currency_2(float(next_forecast['yhat_lower_original']))} - {_currency_2(float(next_forecast['yhat_upper_original']))}", 
+                    accent=True,
+                    positive=True
+                )
+
+            # Información complementaria en el tab de resumen
+            st.markdown(
+                f"""
+                <div class='panel-card' style='margin-top: 1rem;'>
+                    <div class='section-title'>📊 Detalles de Datos de Ventas</div>
+                    <ul style='font-size: 0.82rem; color: #475569; line-height: 1.6; padding-left: 1.2rem; margin: 0.5rem 0 0 0;'>
+                        <li><b>Total de registros:</b> {len(weekly_df)} semanas de datos de ventas reales cargadas desde <code>ventas.csv</code>.</li>
+                        <li><b>Última semana registrada:</b> {last_hist['ds'].strftime('%d/%m/%Y')} con un ingreso real de <b>{_currency_2(last_hist['y'])}</b>.</li>
+                        <li><b>Modelo Prophet:</b> Inicializado y parametrizado desde el archivo de persistencia <code>{MODEL_PATH.name}</code>.</li>
+                        <li><b>Modelo Baseline (Media Móvil):</b> Utiliza parámetros cargados de <code>{MA_MODEL_PATH.name}</code>.</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
