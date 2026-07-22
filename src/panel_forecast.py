@@ -1030,38 +1030,34 @@ def show_panel():
 
         err_left, err_right = st.columns(2)
         with err_left:
-            fig_err_mape, ax_err_mape = plt.subplots(figsize=(4.3, 4.2))
-            _apply_chart_style(fig_err_mape, ax_err_mape)
+            fig_err_mape, ax_err_mape = plt.subplots(figsize=(4.3, 4.2), dpi=100)
             x = np.arange(len(error_df))
             width = 0.33
             ax_err_mape.bar(x - width / 2, error_df["prophet_mape"], width=width, color="#000000", label="Prophet")
             ax_err_mape.bar(x + width / 2, error_df["ma_mape"], width=width, color="#d4d4d8", label="Media Movil")
             ax_err_mape.set_xticks(x)
             ax_err_mape.set_xticklabels(error_df["semana"], fontsize=7)
-            ax_err_mape.set_ylabel("MAPE (%)")
-            ax_err_mape.set_xlabel("Semana")
             ax_err_mape.legend(frameon=False, fontsize=7, loc="upper left")
             for idx, value in enumerate(error_df["prophet_mape"]):
                 ax_err_mape.text(idx - width / 2, value + 0.3, f"{value:.1f}%", ha="center", va="bottom", fontsize=7, color="#000000", fontweight="bold")
             for idx, value in enumerate(error_df["ma_mape"]):
                 ax_err_mape.text(idx + width / 2, value + 0.3, f"{value:.1f}%", ha="center", va="bottom", fontsize=7, color="#52525b", fontweight="bold")
+            _apply_chart_style(fig_err_mape, ax_err_mape, ylabel="MAPE (%)", xlabel="Semana")
             st.pyplot(fig_err_mape, use_container_width=True)
             plt.close(fig_err_mape)
 
         with err_right:
-            fig_err_rmse, ax_err_rmse = plt.subplots(figsize=(4.3, 4.2))
-            _apply_chart_style(fig_err_rmse, ax_err_rmse)
+            fig_err_rmse, ax_err_rmse = plt.subplots(figsize=(4.3, 4.2), dpi=100)
             ax_err_rmse.bar(x - width / 2, error_df["prophet_rmse"], width=width, color="#000000", label="Prophet")
             ax_err_rmse.bar(x + width / 2, error_df["ma_rmse"], width=width, color="#d4d4d8", label="Media Movil")
             ax_err_rmse.set_xticks(x)
             ax_err_rmse.set_xticklabels(error_df["semana"], fontsize=7)
-            ax_err_rmse.set_ylabel("RMSE")
-            ax_err_rmse.set_xlabel("Semana")
             ax_err_rmse.legend(frameon=False, fontsize=7, loc="upper left")
             for idx, value in enumerate(error_df["prophet_rmse"]):
                 ax_err_rmse.text(idx - width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#000000", fontweight="bold")
             for idx, value in enumerate(error_df["ma_rmse"]):
                 ax_err_rmse.text(idx + width / 2, value + 0.3, f"{value:.1f}", ha="center", va="bottom", fontsize=7, color="#52525b", fontweight="bold")
+            _apply_chart_style(fig_err_rmse, ax_err_rmse, ylabel="RMSE", xlabel="Semana")
             st.pyplot(fig_err_rmse, use_container_width=True)
             plt.close(fig_err_rmse)
         st.markdown("</div>", unsafe_allow_html=True)
