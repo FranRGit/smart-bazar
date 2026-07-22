@@ -710,22 +710,19 @@ def show_panel():
             unsafe_allow_html=True,
         )
         future_table = future_rows[["ds", "yhat_original", "yhat_lower_original", "yhat_upper_original"]].copy()
-        future_table = future_table.merge(ma_future, on="ds", how="left")
         future_table = future_table.head(horizon_weeks).copy()
         future_table = future_table.rename(columns={
             "ds": "Fecha",
             "yhat_original": "Pronostico Prophet",
-            "yhat_lower_original": "Limite Inf",
-            "yhat_upper_original": "Limite Sup",
-            "ma_pred": "Media Movil",
+            "yhat_lower_original": "Pronostico minimo",
+            "yhat_upper_original": "Pronostico maximo",
         })
         future_table["Fecha"] = future_table["Fecha"].dt.strftime("%d/%m/%Y")
         st.dataframe(
             future_table.style.format({
                 "Pronostico Prophet": "S/ {:,.2f}",
-                "Limite Inf": "S/ {:,.2f}",
-                "Limite Sup": "S/ {:,.2f}",
-                "Media Movil": "S/ {:,.2f}",
+                "Pronostico minimo": "S/ {:,.2f}",
+                "Pronostico maximo": "S/ {:,.2f}",
             }),
             use_container_width=True,
             hide_index=True,
