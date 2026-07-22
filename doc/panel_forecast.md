@@ -177,7 +177,7 @@ def _safe_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[float, float]
     return rmse, mape
 ```
 
-Con base en estas métricas, la Interfaz de Usuario designa automáticamente a un **Ganador Dinámico**, prefiriendo aquel modelo que minimiza la suma de ambas métricas en la ventana de prueba (Backtesting).
+Con base en estas métricas, la Interfaz de Usuario designa automáticamente a un **Ganador Dinámico**, prefiriendo aquel modelo que minimiza el error porcentual relativo (MAPE) en la ventana de prueba (Backtesting).
 
 ---
 
@@ -201,7 +201,7 @@ Esta pestaña está enfocada netamente en la visión a futuro del negocio y las 
 Esta pestaña cumple la función de auditoría algorítmica, permitiendo verificar la confiabilidad de las predicciones a través de métricas comparativas:
 * **Gráfico de Zoom (Ventana de Prueba):** Aísla las últimas 4 semanas del historial para mostrar con precisión milimétrica cómo la predicción del modelo (Prophet) se adaptó a los datos reales antes de predecir el futuro incierto, contrastándolo a la vez con la línea base (Media Móvil).
 * **Métricas (KPI Cards "Flip"):** Tarjetas interactivas diseñadas con animaciones CSS avanzadas (efecto flip 3D) que exponen las métricas principales de error (RMSE y MAPE) para ambos modelos.
-* **Declaración del Modelo Ganador:** Un componente dinámico que evalúa en tiempo real cuál de los dos modelos (Prophet o Media Móvil) minimizó la suma del RMSE y MAPE, declarándolo como el modelo más confiable ("Ganador Dinámico").
+* **Declaración del Modelo Ganador:** Un componente dinámico que evalúa en tiempo real cuál de los dos modelos (Prophet o Media Móvil) minimizó el MAPE, declarándolo como el modelo más confiable ("Ganador Dinámico").
 
 #### 💰 Resumen de Ventas (Tab 3)
 Esta pestaña proporciona una visión ejecutiva del estado financiero de Smart Bazar sintetizando los KPI (Key Performance Indicators) de la operación del negocio:

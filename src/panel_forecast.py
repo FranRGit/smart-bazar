@@ -691,26 +691,14 @@ def show_panel():
         st.markdown("<div class='section-title'>Ajustes de pronóstico</div>", unsafe_allow_html=True)
         st.markdown("<div class='section-caption'>Ajusta los parámetros para volver a ejecutar el modelo de series temporales.</div>", unsafe_allow_html=True)
 
-        col_adj1, col_adj2, col_adj3 = st.columns([2, 2, 1])
-        with col_adj1:
-            horizon_options = [4, 8, 12, 16, 24, 52]
-            horizon_weeks = st.select_slider(
-                "Horizonte de prediccion",
-                options=horizon_options,
-                value=4,
-                format_func=lambda value: f"Proximas {value} semanas",
-                key="horizon_weeks"
-            )
-        with col_adj2:
-            focus_year = st.select_slider(
-                "Vista de analisis",
-                options=["Resumen temporal", "Ultimas 8 semanas", "Ultimas 12 semanas"],
-                value="Resumen temporal",
-                key="focus_year"
-            )
-        with col_adj3:
-            st.markdown("<div style='height: 1.8rem;'></div>", unsafe_allow_html=True)
-            run_model = st.button("Ejecutar modelo", use_container_width=True, key="run_model")
+        horizon_options = [4, 8, 12, 16, 24, 52]
+        horizon_weeks = st.select_slider(
+            "Horizonte de prediccion",
+            options=horizon_options,
+            value=4,
+            format_func=lambda value: f"Proximas {value} semanas",
+            key="horizon_weeks"
+        )
         st.markdown("</div>", unsafe_allow_html=True)
 
         # CÓMPUTOS DEL MODELO (se ejecutan en Tab 1 y quedan disponibles para el resto de pestañas)
@@ -725,8 +713,7 @@ def show_panel():
         if future_rows.empty:
             future_rows = forecast_future.tail(1).copy().reset_index(drop=True)
         
-        recent_window = 8 if focus_year == "Ultimas 8 semanas" else 12 if focus_year == "Ultimas 12 semanas" else min(4, len(weekly_df))
-        backtest_window = min(max(recent_window, 4), max(4, len(weekly_df) // 4 if len(weekly_df) >= 8 else len(weekly_df)))
+        backtest_window = min(4, len(weekly_df))
         error_df = _build_backtest_frame(weekly_df, forecast_hist, ma_history, window=backtest_window)
 
         last_hist = weekly_df.iloc[-1]
@@ -742,20 +729,17 @@ def show_panel():
         prophet_rmse, prophet_mape = _safe_metrics(recent_slice["y"].to_numpy(), recent_slice["yhat_original"].to_numpy())
         ma_rmse, ma_mape = _safe_metrics(recent_slice["y"].to_numpy(), recent_slice["ma_pred"].to_numpy())
         
-        prophet_score = prophet_rmse + prophet_mape
-        ma_score = ma_rmse + ma_mape
-        if prophet_score < ma_score:
+        if prophet_mape < ma_mape:
             winner = "Prophet"
-            winner_note = "Menor error combinado en RMSE + MAPE"
-        elif ma_score < prophet_score:
+            winner_note = "Menor error porcentual (MAPE)"
+        elif ma_mape < prophet_mape:
             winner = "Media Movil"
-            winner_note = f"Ventana {int(ma_params.get('window', 3))} y ultimo promedio exportado"
+            winner_note = f"Menor MAPE. Ventana {int(ma_params.get('window', 3))} y último promedio"
         else:
             winner = "Empate"
-            winner_note = "Ambos modelos muestran el mismo error combinado"
+            winner_note = "Ambos modelos muestran el mismo MAPE"
 
-        if not run_model:
-            st.info("ℹ️ Modifica el horizonte de predicción arriba y presiona **Ejecutar modelo** para actualizar los pronósticos en tiempo real.")
+
 
         # Gráfico: Evolución de ventas semanales
         st.markdown(
@@ -1014,8 +998,8 @@ def show_panel():
                 "Ganador Dinámico",
                 winner,
                 winner_note,
-                "Comparación del error combinado RMSE + MAPE de ambos modelos en la ventana de prueba.",
-                "Selección automática del algoritmo con la menor varianza y mayor precisión de backtesting.",
+                "Comparación del error porcentual absoluto medio (MAPE) de ambos modelos en la ventana de prueba.",
+                "Selección automática del algoritmo con el menor MAPE de backtesting.",
                 accent=True,
                 positive=True
             )
