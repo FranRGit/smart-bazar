@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import textwrap
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
@@ -59,21 +60,23 @@ def kpi(title, value, delta="", alert=False):
 def insight(title, content, badge="INSIGHT DE NEGOCIO"):
     title_clean = title.replace("\n", "<br>")
     st.markdown(
-        f'''
-        <div class="flip-insight-container">
-            <div class="flip-insight-card">
+        textwrap.dedent(
+            f'''
+            <div class="flip-insight-container">
+              <div class="flip-insight-card">
                 <div class="flip-insight-front">
-                    <span class="insight-badge">{badge}</span>
-                    <div class="flip-insight-title">{title_clean}</div>
-                    <div class="flip-hint">🔄 Pasa el ratón (hover) para revelar el detalle y justificación analítica</div>
+                  <span class="insight-badge">{badge}</span>
+                  <div class="flip-insight-title">{title_clean}</div>
+                  <div class="flip-hint">🔄 Pasa el ratón (hover) para revelar el detalle y justificación analítica</div>
                 </div>
                 <div class="flip-insight-back">
-                    <span class="insight-badge">{badge} — DETALLE</span>
-                    <p class="flip-insight-body">{content}</p>
+                  <span class="insight-badge">{badge} — DETALLE</span>
+                  <p class="flip-insight-body">{content}</p>
                 </div>
+              </div>
             </div>
-        </div>
-        ''',
+            '''
+        ).strip(),
         unsafe_allow_html=True
     )
 

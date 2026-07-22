@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import sqlite3
+import textwrap
 from datetime import datetime
 from src.panel_predictivo import cargar_modelo
 
@@ -157,21 +158,23 @@ def show_panel():
     with tab_pos:
         # Header Section de POS
         st.markdown(
-            """
-            <div style="background: #f7f3f2; border: 1px solid rgba(0,0,0,0.06); border-radius: 18px; padding: 1rem 1.6rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                <div>
+            textwrap.dedent(
+                """
+                <div style="background: #f7f3f2; border: 1px solid rgba(0,0,0,0.06); border-radius: 18px; padding: 1rem 1.6rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
                     <h3 style="margin:0; font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; color: #000000;">Punto de Venta Inteligente</h3>
                     <p style="margin: 2px 0 0 0; font-size: 0.82rem; color: #747878;">Terminal Activa — Caja 01 · Asistente Apriori & K-Means Online</p>
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
+                  </div>
+                  <div style="display: flex; gap: 10px; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 0.4rem 1rem; border-radius: 9999px; border: 1px solid rgba(0,0,0,0.06);">
-                        <span style="font-size: 0.9rem;">👤</span>
-                        <span style="font-size: 0.82rem; font-weight: 600; color: #1c1b1b;">Cajero 01</span>
+                      <span style="font-size: 0.9rem;">👤</span>
+                      <span style="font-size: 0.82rem; font-weight: 600; color: #1c1b1b;">Cajero 01</span>
                     </div>
+                  </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True
+                """
+            ).strip(),
+            unsafe_allow_html=True,
         )
 
         # Top Section: 60/40 Split (Span 7 vs Span 5)
@@ -180,14 +183,16 @@ def show_panel():
         with col_left:
             # Bento Card: Large Search / Product Selector
             st.markdown(
-                """
-                <div style="background: #ffffff; border: 1px solid rgba(0,0,0,0.06); border-radius: 20px; padding: 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.02);">
-                    <p style="font-size: 0.80rem; font-weight: 700; color: #747878; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.8rem 0;">
+                textwrap.dedent(
+                    """
+                    <div style="background: #ffffff; border: 1px solid rgba(0,0,0,0.06); border-radius: 20px; padding: 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.02);">
+                      <p style="font-size: 0.80rem; font-weight: 700; color: #747878; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.8rem 0;">
                         🔍 Escanear Código o Seleccionar Producto del Catálogo
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
+                      </p>
+                    </div>
+                    """
+                ).strip(),
+                unsafe_allow_html=True,
             )
 
             producto_sel = st.selectbox(
@@ -241,108 +246,116 @@ def show_panel():
             col_q1, col_q2 = st.columns(2)
             with col_q1:
                 st.markdown(
-                    f"""
-                    <div style="background: #f7f3f2; border: 1px solid rgba(0,0,0,0.05); border-radius: 16px; padding: 1.1rem; display: flex; align-items: center; gap: 14px;">
-                        <div style="width: 44px; height: 44px; border-radius: 12px; background: #ebe7e6; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">🕒</div>
-                        <div>
+                    textwrap.dedent(
+                        f"""
+                        <div style="background: #f7f3f2; border: 1px solid rgba(0,0,0,0.05); border-radius: 16px; padding: 1.1rem; display: flex; align-items: center; gap: 14px;">
+                          <div style="width: 44px; height: 44px; border-radius: 12px; background: #ebe7e6; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">🕒</div>
+                          <div>
                             <p style="font-size: 0.72rem; color: #747878; font-weight: 700; text-transform: uppercase; margin: 0;">Último Escaneo</p>
                             <p style="font-size: 1rem; font-weight: 700; color: #000000; margin: 2px 0 0 0;">{producto_sel}</p>
+                          </div>
                         </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+                        """
+                    ).strip(),
+                    unsafe_allow_html=True,
                 )
             with col_q2:
                 st.markdown(
-                    """
-                    <div style="background: #fff5f5; border: 1px solid #ffdad6; border-radius: 16px; padding: 1.1rem; display: flex; align-items: center; gap: 14px;">
-                        <div style="width: 44px; height: 44px; border-radius: 12px; background: #ffdad6; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">✖</div>
-                        <div>
+                    textwrap.dedent(
+                        """
+                        <div style="background: #fff5f5; border: 1px solid #ffdad6; border-radius: 16px; padding: 1.1rem; display: flex; align-items: center; gap: 14px;">
+                          <div style="width: 44px; height: 44px; border-radius: 12px; background: #ffdad6; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">✖</div>
+                          <div>
                             <p style="font-size: 0.72rem; color: #ba1a1a; font-weight: 700; text-transform: uppercase; margin: 0;">Acción Rápida</p>
                             <p style="font-size: 1rem; font-weight: 700; color: #ba1a1a; margin: 2px 0 0 0;">Anular / Limpiar Item</p>
+                          </div>
                         </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+                        """
+                    ).strip(),
+                    unsafe_allow_html=True,
                 )
 
             # Asistente IA Integrado (Motor de Recomendación en Vivo)
             st.write("")
             st.markdown(
-                f"""
-                <div style="background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 20px; padding: 1.4rem; box-shadow: 0 4px 20px rgba(0,0,0,0.02);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                textwrap.dedent(
+                    f"""
+                    <div style="background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 20px; padding: 1.4rem; box-shadow: 0 4px 20px rgba(0,0,0,0.02);">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
                         <span style="font-size: 0.82rem; font-weight: 700; color: #000000; text-transform: uppercase; letter-spacing: 0.05em;">🧠 Asistente IA en Vivo (Reglas Apriori)</span>
                         <span style="background: #dcfce7; color: #15803d; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 9999px;">Confianza: {pred_conf:.0%}</span>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      </div>
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                         <div style="background: #f7f3f2; padding: 1rem; border-radius: 14px;">
-                            <p style="font-size: 0.72rem; color: #747878; font-weight: 600; text-transform: uppercase; margin: 0;">Método de Pago Previsto</p>
-                            <p style="font-size: 1.15rem; font-weight: 800; color: #8b5cf6; margin: 4px 0 0 0;">📱 {pred_pago}</p>
+                          <p style="font-size: 0.72rem; color: #747878; font-weight: 600; text-transform: uppercase; margin: 0;">Método de Pago Previsto</p>
+                          <p style="font-size: 1.15rem; font-weight: 800; color: #8b5cf6; margin: 4px 0 0 0;">📱 {pred_pago}</p>
                         </div>
                         <div style="background: #f7f3f2; padding: 1rem; border-radius: 14px;">
-                            <p style="font-size: 0.72rem; color: #747878; font-weight: 600; text-transform: uppercase; margin: 0;">Combo Sugerido para Upsell</p>
-                            <p style="font-size: 0.95rem; font-weight: 700; color: #10b981; margin: 4px 0 0 0;">💡 {sugerencia_combo}</p>
+                          <p style="font-size: 0.72rem; color: #747878; font-weight: 600; text-transform: uppercase; margin: 0;">Combo Sugerido para Upsell</p>
+                          <p style="font-size: 0.95rem; font-weight: 700; color: #10b981; margin: 4px 0 0 0;">💡 {sugerencia_combo}</p>
                         </div>
+                      </div>
                     </div>
-                </div>
-                """,
-                unsafe_allow_html=True
+                    """
+                ).strip(),
+                unsafe_allow_html=True,
             )
 
         with col_right:
             # Bento Card Dark (Ticket Virtual #TK-2023-8902 - Fiel a Stitch)
             st.markdown(
-                f"""
-                <div style="background: #1c1b1b; color: #ffffff; border-radius: 24px; padding: 2rem 1.8rem; box-shadow: 0 16px 36px rgba(0,0,0,0.22); min-height: 520px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
+                textwrap.dedent(
+                    f"""
+                    <div style="background: #1c1b1b; color: #ffffff; border-radius: 24px; padding: 2rem 1.8rem; box-shadow: 0 16px 36px rgba(0,0,0,0.22); min-height: 520px; display: flex; flex-direction: column; justify-content: space-between;">
+                      <div>
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 1.2rem; margin-bottom: 1.5rem;">
-                            <h3 style="margin: 0; color: #ffffff !important; font-family: 'Outfit', sans-serif; font-size: 1.35rem; display: flex; align-items: center; gap: 8px;">
-                                <span>🧾</span> Ticket Virtual
-                            </h3>
-                            <span style="font-size: 0.82rem; color: rgba(255,255,255,0.5); font-family: monospace;">#{id_venta_input.strip()}</span>
+                          <h3 style="margin: 0; color: #ffffff !important; font-family: 'Outfit', sans-serif; font-size: 1.35rem; display: flex; align-items: center; gap: 8px;">
+                            <span>🧾</span> Ticket Virtual
+                          </h3>
+                          <span style="font-size: 0.82rem; color: rgba(255,255,255,0.5); font-family: monospace;">#{id_venta_input.strip()}</span>
                         </div>
 
                         <!-- Lista de Items -->
                         <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 2rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div>
-                                    <p style="font-size: 1.05rem; font-weight: 600; color: #ffffff; margin: 0 0 3px 0;">{producto_sel}</p>
-                                    <p style="font-size: 0.80rem; color: rgba(255,255,255,0.6); margin: 0;">Depto: {depto_input} · 1 x S/ {total_input:.2f}</p>
-                                </div>
-                                <span style="font-size: 1.05rem; font-weight: 600; color: #ffffff;">S/ {total_input:.2f}</span>
+                          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                              <p style="font-size: 1.05rem; font-weight: 600; color: #ffffff; margin: 0 0 3px 0;">{producto_sel}</p>
+                              <p style="font-size: 0.80rem; color: rgba(255,255,255,0.6); margin: 0;">Depto: {depto_input} · 1 x S/ {total_input:.2f}</p>
                             </div>
-                            
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; opacity: 0.75;">
-                                <div>
-                                    <p style="font-size: 0.95rem; font-weight: 500; color: #10b981; margin: 0 0 3px 0;">+ Sugerencia Apriori</p>
-                                    <p style="font-size: 0.78rem; color: rgba(255,255,255,0.6); margin: 0;">{sugerencia_combo.split(' (')[0]}</p>
-                                </div>
-                                <span style="font-size: 0.90rem; color: #10b981;">Upsell Sugerido</span>
+                            <span style="font-size: 1.05rem; font-weight: 600; color: #ffffff;">S/ {total_input:.2f}</span>
+                          </div>
+                          
+                          <div style="display: flex; justify-content: space-between; align-items: flex-start; opacity: 0.75;">
+                            <div>
+                              <p style="font-size: 0.95rem; font-weight: 500; color: #10b981; margin: 0 0 3px 0;">+ Sugerencia Apriori</p>
+                              <p style="font-size: 0.78rem; color: rgba(255,255,255,0.6); margin: 0;">{sugerencia_combo.split(' (')[0]}</p>
                             </div>
+                            <span style="font-size: 0.90rem; color: #10b981;">Upsell Sugerido</span>
+                          </div>
                         </div>
-                    </div>
+                      </div>
 
-                    <!-- Totales y Botón de Pago -->
-                    <div>
+                      <!-- Totales y Botón de Pago -->
+                      <div>
                         <div style="border-top: 1px dashed rgba(255,255,255,0.18); padding-top: 1.2rem; display: flex; flex-direction: column; gap: 8px; margin-bottom: 1.6rem;">
-                            <div style="display: flex; justify-content: space-between; font-size: 0.88rem; color: rgba(255,255,255,0.7);">
-                                <span>Subtotal</span>
-                                <span>S/ {(total_input / 1.18):.2f}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 0.88rem; color: rgba(255,255,255,0.7);">
-                                <span>IGV (18%)</span>
-                                <span>S/ {(total_input - (total_input / 1.18)):.2f}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-top: 4px;">
-                                <span>TOTAL A PAGAR</span>
-                                <span style="color: #06b6d4;">S/ {total_input:.2f}</span>
-                            </div>
+                          <div style="display: flex; justify-content: space-between; font-size: 0.88rem; color: rgba(255,255,255,0.7);">
+                            <span>Subtotal</span>
+                            <span>S/ {(total_input / 1.18):.2f}</span>
+                          </div>
+                          <div style="display: flex; justify-content: space-between; font-size: 0.88rem; color: rgba(255,255,255,0.7);">
+                            <span>IGV (18%)</span>
+                            <span>S/ {(total_input - (total_input / 1.18)):.2f}</span>
+                          </div>
+                          <div style="display: flex; justify-content: space-between; font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-top: 4px;">
+                            <span>TOTAL A PAGAR</span>
+                            <span style="color: #06b6d4;">S/ {total_input:.2f}</span>
+                          </div>
                         </div>
+                      </div>
                     </div>
-                </div>
-                """,
-                unsafe_allow_html=True
+                    """
+                ).strip(),
+                unsafe_allow_html=True,
             )
 
             st.write("")
@@ -441,13 +454,15 @@ def show_panel():
 
             with col_act1:
                 st.markdown(
-                    """
-                    <div style="background: #fff5f5; border: 1px solid #ffdad6; border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem;">
-                        <h4 style="margin:0; color: #ba1a1a;">🗑️ Eliminar Registro de Venta</h4>
-                        <p style="font-size: 0.82rem; color: #747878; margin: 4px 0 0 0;">Esta acción es irreversible y removerá la venta de la base de datos.</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+                    textwrap.dedent(
+                        """
+                        <div style="background: #fff5f5; border: 1px solid #ffdad6; border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem;">
+                          <h4 style="margin:0; color: #ba1a1a;">🗑️ Eliminar Registro de Venta</h4>
+                          <p style="font-size: 0.82rem; color: #747878; margin: 4px 0 0 0;">Esta acción es irreversible y removerá la venta de la base de datos.</p>
+                        </div>
+                        """
+                    ).strip(),
+                    unsafe_allow_html=True,
                 )
                 venta_delete = st.selectbox(
                     "Seleccione Código de Venta a eliminar:",
@@ -468,13 +483,15 @@ def show_panel():
 
             with col_act2:
                 st.markdown(
-                    """
-                    <div style="background: #fdf8f8; border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem;">
-                        <h4 style="margin:0; color: #000000;">✏️ Modificar / Editar Registro</h4>
-                        <p style="font-size: 0.82rem; color: #747878; margin: 4px 0 0 0;">Actualiza el monto, cliente o departamento de una venta existente.</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+                    textwrap.dedent(
+                        """
+                        <div style="background: #fdf8f8; border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem;">
+                          <h4 style="margin:0; color: #000000;">✏️ Modificar / Editar Registro</h4>
+                          <p style="font-size: 0.82rem; color: #747878; margin: 4px 0 0 0;">Actualiza el monto, cliente o departamento de una venta existente.</p>
+                        </div>
+                        """
+                    ).strip(),
+                    unsafe_allow_html=True,
                 )
                 venta_edit = st.selectbox(
                     "Seleccione Código de Venta a modificar:",
