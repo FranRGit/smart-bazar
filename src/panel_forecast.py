@@ -567,7 +567,6 @@ def show_panel():
         return
 
     # Renderizar la interfaz de usuario del panel de pronóstico
-    st.markdown("<div class='forecast-root'>", unsafe_allow_html=True)
     left_col, right_col = st.columns([0.24, 0.76], gap="large")
 
     # Renderizar la barra lateral con información y controles
@@ -580,14 +579,19 @@ def show_panel():
             "<div class='sidebar-item'>Rango de fechas</div>"
             "<div class='sidebar-item'>Campanas escolares</div>"
             "<div class='sidebar-item'>Festivos</div>"
-            "<div class='sidebar-item'>Modelos predictivos</div>",
+            "<div class='sidebar-item'>Modelos predictivos</div>"
+            "</div>",
             unsafe_allow_html=True,
         )
 
         st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='panel-card'>", unsafe_allow_html=True)
-        st.markdown("<div class='section-title'>Ajustes de pronostico</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-caption'>Controla la ventana futura del modelo.</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='panel-card'>"
+            "<div class='section-title'>Ajustes de pronostico</div>"
+            "<div class='section-caption'>Controla la ventana futura del modelo.</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
         horizon_options = [4, 8, 12, 16, 24, 52]
         horizon_weeks = st.select_slider(
@@ -602,7 +606,6 @@ def show_panel():
             value="Resumen temporal",
         )
         run_model = st.button("Ejecutar modelo", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     # Renderizar la sección principal con los resultados del pronóstico
     with right_col:
@@ -806,10 +809,9 @@ def show_panel():
 
             st.markdown("</div>", unsafe_allow_html=True)
 
+
         st.markdown(
             f"<div class='panel-card'>Actualizado con {len(weekly_df)} semanas historicas cargadas desde ventas.csv. "
             f"El modelo Prophet se ejecuta desde {MODEL_PATH.name} y la media movil usa {MA_MODEL_PATH.name}.</div>",
             unsafe_allow_html=True,
         )
-
-    st.markdown("</div>", unsafe_allow_html=True)
