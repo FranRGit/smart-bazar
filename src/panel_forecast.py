@@ -478,6 +478,24 @@ def _build_regressors(df: pd.DataFrame, years: list[int]) -> pd.DataFrame:
         reg_df["is_nat"] = 0
     if "is_school" not in reg_df.columns:
         reg_df["is_school"] = 0
+
+    # ==========================================================================
+    # === EVALUACIÓN DOCENTE: INYECCIÓN DE REGRESORES EXÓGENOS ===
+    # Teoría:
+    #   - Prophet es un modelo aditivo. Los regresores exógenos (feriados 'is_nat',
+    #     periodo escolar 'is_school') se suman a la ecuación de tendencia y
+    #     estacionalidad. Permiten absorber picos o caídas recurrentes que no
+    #     se explican solo con el tiempo.
+    #
+    # Código en Vivo (Crear y anexar 'is_quincena' para salarios los 15 y 30):
+    #   # 1. Crear regresor (dentro de esta función o antes de agrupar):
+    #   # reg_df['is_quincena'] = reg_df['ds'].dt.day.isin([15, 30]).astype(int)
+    #   #
+    #   # 2. Agregar al modelo final en el notebook/código de entrenamiento:
+    #   # final_model.add_regressor('is_quincena')
+    #   # final_model.fit(df_full_p)
+    # ==========================================================================
+
     return reg_df[["ds", "is_nat", "is_school"]]
 
 
@@ -501,6 +519,27 @@ def _prepare_weekly_data() -> pd.DataFrame:
     end_year = int(weekly_df["ds"].dt.year.max()) + 2
     weekly_df = weekly_df.merge(_build_regressors(weekly_df[["ds"]], list(range(start_year, end_year + 1))), on="ds", how="left")
     weekly_df[["is_nat", "is_school"]] = weekly_df[["is_nat", "is_school"]].fillna(0).astype(int)
+
+    # ==============================================================================
+    # === EVALUACIÓN DOCENTE: ANÁLISIS DE ESTACIONARIEDAD ===
+    # Teoría:
+    #   - El Test Aumentado de Dickey-Fuller (ADF) evalúa la hipótesis nula (H0) de
+    #     que la serie temporal tiene una raíz unitaria (es no estacionaria).
+    #     Si el p-valor es < 0.05, rechazamos H0 y la serie se considera estacionaria.
+    #   - Si la serie no es estacionaria, se aplica "diferenciación" (restar el valor
+    #     actual menos el anterior: y_t - y_t-1) para estabilizar la media.
+    #
+    # Código en Vivo (Descomentar para probar en vivo con el docente):
+    #   # from statsmodels.tsa.stattools import adfuller
+    #   # result = adfuller(weekly_df['y'])
+    #   # print(f"Estadístico ADF: {result[0]}")
+    #   # print(f"p-valor: {result[1]}")
+    #   # if result[1] < 0.05:
+    #   #     print("La serie es Estacionaria (Rechaza H0)")
+    #   # else:
+    #   #     print("La serie NO es Estacionaria (Requiere diferenciar: weekly_df['y'].diff().dropna())")
+    # ==============================================================================
+
     return weekly_df
 
 
@@ -509,6 +548,22 @@ def _load_model():
     """
     Carga el modelo Prophet desde un archivo joblib.
     """
+    # ==============================================================================
+    # === EVALUACIÓN DOCENTE: FLEXIBILIDAD DE TENDENCIA (OVERFITTING) ===
+    # Teoría:
+    #   - 'changepoint_prior_scale' regula la rigidez de la tendencia en Prophet.
+    #     Valor por defecto: 0.05.
+    #     Si se eleva (ej. a 0.5 o 1.0), el modelo se vuelve extremadamente flexible,
+    #     siguiendo el ruido de los datos (overfitting), debilitando la estacionalidad.
+    #     Si se baja (ej. a 0.001), la tendencia se vuelve casi una línea recta (underfitting).
+    #
+    # Código en Vivo (Forzar sobreajuste al inicializar m_prophet):
+    #   # from prophet import Prophet
+    #   # m_overfit = Prophet(changepoint_prior_scale=0.9, growth='linear')
+    #   # m_overfit.fit(df_train)
+    #   # m_overfit.plot_components(m_overfit.predict(df_train))
+    # ==============================================================================
+
     if not MODEL_PATH.exists():
         raise FileNotFoundError(f"No se encontró el modelo en {MODEL_PATH}")
     try:
@@ -544,6 +599,25 @@ def _fit_forecast_frame(model, weekly_df: pd.DataFrame, horizon_weeks: int):
 
     forecast_hist = model.predict(history_features[["ds", "is_nat", "is_school"]])
     forecast_hist = forecast_hist[["ds", "yhat", "yhat_lower", "yhat_upper"]].copy()
+
+    # ==========================================================================
+    # === EVALUACIÓN DOCENTE: REVERSIÓN LOGARÍTMICA (SESGO DE EXPONENCIACIÓN) ===
+    # Teoría:
+    #   - Al entrenar con log(1+y) y predecir yhat, aplicar np.expm1(yhat) introduce
+    #     un sesgo sistemático hacia abajo debido a la desigualdad de Jensen:
+    #     E[exp(X)] != exp(E[X]).
+    #   - Corrección (Smearing de Duan): Se multiplica por un factor empírico, o
+    #     se suma la mitad de la varianza del error residual (sigma^2 / 2) antes de
+    #     exponenciar: yhat_corrected = exp(yhat + 0.5 * resid_variance) - 1.
+    #
+    # Código en Vivo (Corrección empírica de Smearing de Duan):
+    #   # 1. Calcular la varianza de los residuos en escala logarítmica:
+    #   # y_log_real = np.log1p(weekly_df['y'])
+    #   # resid_variance = np.var(y_log_real - forecast_hist['yhat'])
+    #   # 2. Aplicar corrección antes de expm1:
+    #   # forecast_hist["yhat_original"] = np.expm1(forecast_hist["yhat"] + 0.5 * resid_variance).clip(lower=0)
+    # ==========================================================================
+
     forecast_hist["yhat_original"] = np.expm1(forecast_hist["yhat"]).clip(lower=0)
     forecast_hist["yhat_lower_original"] = np.expm1(forecast_hist["yhat_lower"]).clip(lower=0)
     forecast_hist["yhat_upper_original"] = np.expm1(forecast_hist["yhat_upper"]).clip(lower=0)
@@ -567,6 +641,22 @@ def _fit_moving_average_frame(weekly_df: pd.DataFrame, horizon_weeks: int, windo
     history = weekly_df[["ds", "y"]].copy()
     history["ma_pred"] = history["y"].rolling(window=window, min_periods=1).mean().shift(1)
     history["ma_pred"] = history["ma_pred"].fillna(last_mean)
+
+    # ==============================================================================
+    # === EVALUACIÓN DOCENTE: COMPARACIÓN CON BASELINE NAÏVE ===
+    # Teoría:
+    #   - Una Media Móvil (3 semanas) suaviza la tendencia reciente pero tiene lag.
+    #   - Un baseline "Naïve" simple predice que el valor de esta semana es igual
+    #     al de la semana pasada (shift(1)). Sirve como el benchmark mínimo.
+    #
+    # Código en Vivo (Modelo Naïve Estacional/Simple y cálculo de su MAPE):
+    #   # from sklearn.metrics import mean_absolute_percentage_error
+    #   # naive_pred = weekly_df['y'].shift(1)
+    #   # val_y = weekly_df['y'].iloc[1:]
+    #   # val_pred = naive_pred.iloc[1:]
+    #   # mape_naive = mean_absolute_percentage_error(val_y, val_pred) * 100
+    #   # print(f"MAPE Naïve (shift 1): {mape_naive:.2f}%")
+    # ==============================================================================
 
     future_dates = pd.date_range(weekly_df["ds"].max() + pd.Timedelta(days=7), periods=horizon_weeks, freq="W-SUN")
     future = pd.DataFrame({
@@ -1100,3 +1190,38 @@ def show_panel():
             """,
             unsafe_allow_html=True
         )
+
+# ==============================================================================
+# === EVALUACIÓN DOCENTE: TRANSICIÓN A REDES NEURONALES COMPLEJAS (CNN-LSTM) ===
+# Teoría:
+#   - Prophet es un modelo aditivo ad-hoc bayesiano que extrae componentes locales
+#     (tendencia lineal/logística, estacionalidades Fourier y feriados) por separado.
+#   - CNN-LSTM es una arquitectura híbrida de Deep Learning:
+#       - CNN (1D): Extrae características locales espaciales o patrones de corto plazo en secuencias.
+#       - LSTM: Aprende relaciones recursivas de largo plazo sobre esas características extraídas.
+#   - Estructuración de datos: A diferencia de Prophet (tabular ds/y), requiere dar formato
+#     a las entradas como un tensor tridimensional 3D: [samples, timesteps, features].
+#
+# Código en Vivo (Estructura Keras para CNN-LSTM):
+#   # import tensorflow as tf
+#   # from tensorflow.keras.models import Sequential
+#   # from tensorflow.keras.layers import Conv1D, LSTM, Dense, Flatten, TimeDistributed
+#   #
+#   # # Ejemplo de dimensiones del tensor
+#   # n_samples = 100    # Ventanas deslizantes de entrenamiento
+#   # n_timesteps = 4    # Timesteps de secuencia temporal (lags: t-4, t-3, t-2, t-1)
+#   # n_features = 6     # Variables exógenas e históricas por timestep
+#   #
+#   # # Entrada: tensor 3D de dimensiones (n_samples, n_timesteps, n_features)
+#   #
+#   # model = Sequential([
+#   #     # CNN 1D para convolucionar sobre las características temporales locales:
+#   #     Conv1D(filters=32, kernel_size=2, activation='relu', input_shape=(n_timesteps, n_features)),
+#   #     # LSTM para modelar la secuencia a lo largo del tiempo:
+#   #     LSTM(64, activation='relu', return_sequences=False),
+#   #     # Capa densa de salida para la predicción de ventas t+1:
+#   #     Dense(1)
+#   # ])
+#   # model.compile(optimizer='adam', loss='mse')
+#   # model.summary()
+# ==============================================================================
